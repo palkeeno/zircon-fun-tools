@@ -6,7 +6,6 @@
 import os
 from dotenv import load_dotenv
 import logging
-import discord
 
 # ロギングの設定
 logging.basicConfig(level=logging.INFO)
@@ -28,12 +27,6 @@ if not TOKEN:
     error_msg = f"{'開発' if ENV == 'development' else '本番'}環境のトークンが設定されていません。"
     logger.error(error_msg)
     raise ValueError(error_msg)
-
-# コマンドプレフィックス（将来的な拡張用）
-PREFIX = '!'
-
-# 占い機能の設定
-FORTUNE_MAX_CHOICES = 5  # 最大選択肢数
 
 # じゃんけんの設定
 JANKEN_TIMEOUT = 30  # じゃんけんの待機時間（秒）
