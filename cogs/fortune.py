@@ -58,10 +58,20 @@ class Fortune(commands.Cog):
             # ランダムな選択肢を生成
             selected = random.randint(1, choices)
 
+            # メッセージテンプレート
+            messages = [
+                f"うーん...{choices}個の選択肢の中から、{selected}番目が一番良さそうですね！",
+                f"私の直感では、{selected}番目の選択肢が運気が強いようです✨",
+                f"あっ！{selected}番目が光って見えます！これが正解です！",
+                f"ふむふむ...{choices}個の選択肢をじっくり見てみると、{selected}番目が気になりますね。",
+                f"私の水晶玉が{selected}番目の選択肢を示しています🔮"
+            ]
+
+            # ランダムにメッセージを選択
+            message = random.choice(messages)
+
             # 結果を送信
-            await interaction.response.send_message(
-                f"{choices}個の選択肢の中から、{selected}番目の選択肢がよいでしょう。"
-            )
+            await interaction.response.send_message(message)
 
         except Exception as e:
             logger.error(f"占いコマンド実行中にエラーが発生しました: {e}\n{traceback.format_exc()}")
