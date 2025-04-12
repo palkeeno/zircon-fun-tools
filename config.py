@@ -44,9 +44,9 @@ COMEDY_GAME_MIN_PLAYERS = 2  # 最小プレイヤー数
 COMEDY_GAME_MAX_CARDS = 3  # 使用できる最大カード数
 
 # 管理者チャンネルの設定
-ADMIN_CHANNEL_ID = int(os.getenv('ADMIN_CHANNEL_ID', 0))
+ADMIN_CHANNEL_ID = int(os.getenv('ADMIN_CHANNEL_ID_DEV' if ENV == 'development' else 'ADMIN_CHANNEL_ID_PROD', 0))
 if not ADMIN_CHANNEL_ID:
-    logger.warning("ADMIN_CHANNEL_IDが設定されていません。管理者コマンドは使用できません。")
+    logger.warning(f"{'開発' if ENV == 'development' else '本番'}環境の管理者チャンネルIDが設定されていません。管理者コマンドは使用できません。")
 
 # 機能の状態管理
 FEATURE_STATUS = {
