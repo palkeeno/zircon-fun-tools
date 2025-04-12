@@ -1,0 +1,79 @@
+{
+    "cards": [
+        {
+            "id": 1,
+            "item": "スマートフォンのライト",
+            "type": "tool"
+        },
+        {
+            "id": 2,
+            "item": "100円ライター",
+            "type": "tool"
+        },
+        {
+            "id": 3,
+            "item": "防災用の笛",
+            "type": "tool"
+        },
+        {
+            "id": 4,
+            "item": "カラオケマイク",
+            "type": "tool"
+        },
+        {
+            "id": 5,
+            "item": "折り畳み傘",
+            "type": "tool"
+        },
+        {
+            "id": 6,
+            "item": "ダンボール箱",
+            "type": "item"
+        },
+        {
+            "id": 7,
+            "item": "古新聞",
+            "type": "item"
+        },
+        {
+            "id": 8,
+            "item": "ガムテープ",
+            "type": "item"
+        },
+        {
+            "id": 9,
+            "item": "バナナの皮",
+            "type": "item"
+        },
+        {
+            "id": 10,
+            "item": "使い捨てカイロ",
+            "type": "item"
+        },
+        {
+            "id": 11,
+            "skill": "腹話術",
+            "type": "skill"
+        },
+        {
+            "id": 12,
+            "skill": "手品",
+            "type": "skill"
+        },
+        {
+            "id": 13,
+            "skill": "ものまね",
+            "type": "skill"
+        },
+        {
+            "id": 14,
+            "skill": "バク転",
+            "type": "skill"
+        },
+        {
+            "id": 15,
+            "skill": "早口言葉",
+            "type": "skill"
+        }
+    ]
+} 
