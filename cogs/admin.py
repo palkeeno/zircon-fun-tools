@@ -49,7 +49,7 @@ class Admin(commands.Cog):
         description="特定の機能を有効化/無効化します"
     )
     @app_commands.describe(
-        feature="機能名 (janken/fortune/comedy)",
+        feature="機能名",
         status="有効化する場合はTrue、無効化する場合はFalse"
     )
     async def feature(self, interaction: discord.Interaction, feature: str, status: bool):
@@ -62,14 +62,15 @@ class Admin(commands.Cog):
             status (bool): 有効化する場合はTrue、無効化する場合はFalse
         """
         try:
-            if config.set_feature_status(feature, status):
+            if feature in config.FEATURE_STATE:
+                config.FEATURE_STATE[feature] = status
                 await interaction.response.send_message(
                     f"機能 '{feature}' を {'有効化' if status else '無効化'} しました。",
                     ephemeral=True
                 )
             else:
                 await interaction.response.send_message(
-                    f"無効な機能名です。使用可能な機能: {', '.join(config.FEATURE_STATUS.keys())}",
+                    f"無効な機能名です。使用可能な機能: {', '.join(config.FEATURE_STATE.keys())}",
                     ephemeral=True
                 )
         except Exception as e:
@@ -94,7 +95,7 @@ class Admin(commands.Cog):
         try:
             status_text = "\n".join([
                 f"- {feature}: {'有効' if enabled else '無効'}"
-                for feature, enabled in config.FEATURE_STATUS.items()
+                for feature, enabled in config.FEATURE_STATE.items()
             ])
             
             embed = discord.Embed(
@@ -111,6 +112,70 @@ class Admin(commands.Cog):
                 "エラーが発生しました。もう一度お試しください。",
                 ephemeral=True
             )
+
+    @app_commands.command(name="enable_command", description="スラッシュコマンドを有効化します")
+    @app_commands.describe(command="有効化するコマンド名")
+    async def enable_command(self, interaction: discord.Interaction, command: str):
+        if not await self._is_admin(interaction):
+            await interaction.response.send_message("このコマンドは管理者のみ使用できます。", ephemeral=True)
+            return
+
+        if command not in config.FEATURE_STATE:
+            await interaction.response.send_message(f"無効なコマンド名です: {command}", ephemeral=True)
+            return
+
+        config.FEATURE_STATE[command] = True
+        await interaction.response.send_message(f"コマンド '{command}' を有効化しました。", ephemeral=True)
+        logger.info(f"コマンド '{command}' が有効化されました。")
+
+    @app_commands.command(name="disable_command", description="スラッシュコマンドを無効化します")
+    @app_commands.describe(command="無効化するコマンド名")
+    async def disable_command(self, interaction: discord.Interaction, command: str):
+        if not await self._is_admin(interaction):
+            await interaction.response.send_message("このコマンドは管理者のみ使用できます。", ephemeral=True)
+            return
+
+        if command not in config.FEATURE_STATE:
+            await interaction.response.send_message(f"無効なコマンド名です: {command}", ephemeral=True)
+            return
+
+        config.FEATURE_STATE[command] = False
+        await interaction.response.send_message(f"コマンド '{command}' を無効化しました。", ephemeral=True)
+        logger.info(f"コマンド '{command}' が無効化されました。")
+
+    @app_commands.command(name="list_commands", description="スラッシュコマンドの状態を一覧表示します")
+    async def list_commands(self, interaction: discord.Interaction):
+        if not await self._is_admin(interaction):
+            await interaction.response.send_message("このコマンドは管理者のみ使用できます。", ephemeral=True)
+            return
+
+        embed = discord.Embed(title="スラッシュコマンドの状態", color=discord.Color.blue())
+        
+        # 既存の機能
+        embed.add_field(
+            name="既存の機能",
+            value="\n".join([f"{cmd}: {'有効' if state else '無効'}" 
+                            for cmd, state in config.FEATURE_STATE.items() 
+                            if cmd in ['comedy', 'janken', 'fortune']]),
+            inline=False
+        )
+        
+        # 新規追加機能
+        embed.add_field(
+            name="新規追加機能",
+            value="\n".join([f"{cmd}: {'有効' if state else '無効'}" 
+                            for cmd, state in config.FEATURE_STATE.items() 
+                            if cmd not in ['comedy', 'janken', 'fortune']]),
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    async def _is_admin(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.guild_permissions.administrator
+
+    def is_command_enabled(self, command_name: str) -> bool:
+        return config.is_feature_enabled(command_name)
 
 async def setup(bot: commands.Bot):
     """

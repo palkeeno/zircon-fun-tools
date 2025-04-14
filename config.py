@@ -4,12 +4,85 @@
 """
 
 import os
+import json
 from dotenv import load_dotenv
 import logging
+from typing import Dict, Any
 
 # ロギングの設定
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 設定ファイルのパス
+SETTINGS_FILE_PATH = os.getenv('SETTINGS_FILE_PATH', 'data/settings.json')
+
+def load_settings() -> Dict[str, Any]:
+    """
+    設定ファイルを読み込みます。
+    
+    Returns:
+        Dict[str, Any]: 設定データ
+    """
+    try:
+        with open(SETTINGS_FILE_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.error(f"{SETTINGS_FILE_PATH}が見つかりません。デフォルト設定を使用します。")
+        return get_default_settings()
+
+def get_default_settings() -> Dict[str, Any]:
+    """
+    デフォルトの設定を返します。
+    
+    Returns:
+        Dict[str, Any]: デフォルト設定
+    """
+    ENV = os.getenv('ENV', 'development')
+    token_key = 'DISCORD_TOKEN_DEV' if ENV == 'development' else 'DISCORD_TOKEN_PROD'
+    token = os.getenv(token_key)
+
+    return {
+        "bot": {
+            "token": token,
+            "prefix": "!",
+            "admin_ids": [],
+            "log_channel_id": None
+        },
+        "features": {
+            "ramble_game": {
+                "enabled": True,
+                "settings": {
+                    "min_players": 2,
+                    "max_players": 10,
+                    "round_duration": 60,
+                    "notification_channel": None
+                }
+            },
+            "birthday": {
+                "enabled": False,
+                "settings": {
+                    "notification_channel": None,
+                    "notification_time": "09:00",
+                    "timezone": "Asia/Tokyo"
+                }
+            },
+            "dictionary": {
+                "enabled": False,
+                "settings": {
+                    "max_words": 1000,
+                    "search_limit": 10,
+                    "fuzzy_search": True
+                }
+            },
+            "omikuji": {
+                "enabled": False,
+                "settings": {
+                    "cooldown": 3600,
+                    "max_draws_per_day": 3
+                }
+            }
+        }
+    }
 
 try:
     # .envファイルを読み込む
@@ -20,13 +93,16 @@ except Exception as e:
 
 # 環境に応じてトークンを設定
 ENV = os.getenv('ENV', 'development')  # デフォルトは開発環境
-TOKEN = os.getenv('DISCORD_TOKEN_DEV' if ENV == 'development' else 'DISCORD_TOKEN_PROD')
+token_key = 'DISCORD_TOKEN_DEV' if ENV == 'development' else 'DISCORD_TOKEN_PROD'
+_token = os.getenv(token_key)
 
 # トークンの検証
-if not TOKEN:
-    error_msg = f"{'開発' if ENV == 'development' else '本番'}環境のトークンが設定されていません。"
+if not _token:
+    error_msg = f"{'開発' if ENV == 'development' else '本番'}環境のトークンが設定されていません。環境変数 {token_key} を設定してください。"
     logger.error(error_msg)
     raise ValueError(error_msg)
+
+TOKEN = _token
 
 # じゃんけんの設定
 JANKEN_TIMEOUT = 30  # じゃんけんの待機時間（秒）
@@ -41,54 +117,20 @@ ADMIN_CHANNEL_ID = int(os.getenv('ADMIN_CHANNEL_ID_DEV' if ENV == 'development' 
 if not ADMIN_CHANNEL_ID:
     logger.warning(f"{'開発' if ENV == 'development' else '本番'}環境の管理者チャンネルIDが設定されていません。管理者コマンドは使用できません。")
 
-# 機能の状態管理
-FEATURE_STATUS = {
-    'janken': True,      # じゃんけん機能
-    'fortune': True,     # 占い機能
-    'comedy': True       # コメディゲーム機能
-}
-
-def is_admin_channel(channel_id: int) -> bool:
-    """
-    指定されたチャンネルが管理者チャンネルかどうかを判定します。
-    
-    Args:
-        channel_id (int): チャンネルID
-        
-    Returns:
-        bool: 管理者チャンネルの場合はTrue、そうでない場合はFalse
-    """
-    return channel_id == ADMIN_CHANNEL_ID
-
-def set_feature_status(feature: str, status: bool) -> bool:
-    """
-    機能の状態を設定します。
-    
-    Args:
-        feature (str): 機能名
-        status (bool): 有効化する場合はTrue、無効化する場合はFalse
-        
-    Returns:
-        bool: 設定に成功した場合はTrue、失敗した場合はFalse
-    """
-    if feature in FEATURE_STATUS:
-        FEATURE_STATUS[feature] = status
-        logger.info(f"機能 '{feature}' の状態を {status} に設定しました")
-        return True
-    logger.warning(f"無効な機能名が指定されました: {feature}")
-    return False
+# 設定の読み込み
+SETTINGS = load_settings()
 
 def is_feature_enabled(feature: str) -> bool:
     """
-    機能が有効かどうかを確認します。
+    指定された機能が有効かどうかを判定します。
     
     Args:
         feature (str): 機能名
         
     Returns:
-        bool: 機能が有効な場合はTrue、無効な場合はFalse
+        bool: 機能が有効な場合はTrue、そうでない場合はFalse
     """
-    return FEATURE_STATUS.get(feature, False)
+    return SETTINGS['features'].get(feature, {}).get('enabled', False)
 
 # じゃんけんの設定
 JANKEN_EMOJIS = {
