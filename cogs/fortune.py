@@ -23,7 +23,6 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 FORTUNE_DATA_PATH = DATA_DIR / "fortune_data.json"
 LUCKY_ITEMS_PATH = DATA_DIR / "lucky_items.json"
 LUCKY_COLORS_PATH = DATA_DIR / "lucky_colors.json"
-FORTUNE_HISTORY_PATH = DATA_DIR / "fortune_history.json"
 
 class Fortune(commands.Cog):
     """
@@ -39,7 +38,6 @@ class Fortune(commands.Cog):
         """
         self.bot = bot
         self.load_data()
-        self.fortune_history = self.load_fortune_history()
         logger.info("Fortune cog initialized")
 
     def load_data(self):
@@ -71,60 +69,6 @@ class Fortune(commands.Cog):
         except Exception as e:
             logger.error(f"データファイルの読み込み中にエラーが発生しました: {e}")
             raise
-
-    def load_fortune_history(self):
-        """データファイルを読み込む"""
-        try:
-            with open(FORTUNE_HISTORY_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except FileNotFoundError:
-            return {"users": {}}
-
-    def save_fortune_history(self):
-        """運勢履歴を保存する"""
-        try:
-            with open(FORTUNE_HISTORY_PATH, "w", encoding="utf-8") as f:
-                json.dump(self.fortune_history, f, ensure_ascii=False, indent=4)
-        except Exception as e:
-            logger.error(f"運勢履歴の保存中にエラーが発生しました: {e}\n{traceback.format_exc()}")
-            raise
-
-    def can_draw_omikuji(self, user_id: str) -> bool:
-        """
-        ユーザーがおみくじを引けるかどうかを判定する
-        
-        Args:
-            user_id (str): ユーザーID
-            
-        Returns:
-            bool: おみくじを引ける場合はTrue、引けない場合はFalse
-        """
-        user_id = str(user_id)
-        if user_id not in self.fortune_history["users"]:
-            return True
-        
-        last_draw = datetime.fromisoformat(self.fortune_history["users"][user_id]["last_draw"])
-        today = datetime.now()
-        return last_draw.date() < today.date()
-
-    def update_fortune_history(self, user_id: str, fortune: dict):
-        """
-        運勢履歴を更新する
-        
-        Args:
-            user_id (str): ユーザーID
-            fortune (dict): 運勢情報
-        """
-        user_id = str(user_id)
-        self.fortune_history["users"][user_id] = {
-            "last_draw": datetime.now().isoformat(),
-            "fortune": fortune["fortune"],
-            "lucky_item": fortune["lucky_item"],
-            "lucky_color": fortune["lucky_color"],
-            "lucky_number": fortune["lucky_number"],
-            "date": fortune["date"]
-        }
-        self.save_fortune_history()
 
     async def show_animation(self, interaction: discord.Interaction):
         """
@@ -184,13 +128,6 @@ class Fortune(commands.Cog):
     @app_commands.command(name="fortune", description="おみくじを引きます")
     async def draw_omikuji(self, interaction: discord.Interaction):
         """おみくじを引きます"""
-        if not self.can_draw_omikuji(interaction.user.id):
-            await interaction.response.send_message(
-                "今日は既におみくじを引いています。明日またお試しください。",
-                ephemeral=True
-            )
-            return
-
         # アニメーションを表示
         await self.show_animation(interaction)
 
@@ -237,15 +174,6 @@ class Fortune(commands.Cog):
         embed.add_field(name="ラッキーカラー", value=lucky_color, inline=True)
         embed.add_field(name="ラッキーナンバー", value=str(lucky_number), inline=True)
         embed.set_footer(text=f"引いた日: {datetime.now().strftime('%Y年%m月%d日')}")
-
-        # 運勢結果を保存
-        self.update_fortune_history(interaction.user.id, {
-            "fortune": selected_fortune,
-            "lucky_item": lucky_item,
-            "lucky_color": lucky_color,
-            "lucky_number": lucky_number,
-            "date": datetime.now().isoformat()
-        })
 
         await interaction.edit_original_response(embed=embed)
 

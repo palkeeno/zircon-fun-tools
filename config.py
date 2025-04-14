@@ -60,8 +60,7 @@ FEATURES = {
     "fortune": {
         "enabled": False,
         "settings": {
-            "cooldown": 3600,
-            "max_draws_per_day": 3
+            "cooldown": 3600
         }
     },
     "comedy_game": {
