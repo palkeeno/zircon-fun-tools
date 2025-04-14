@@ -10,6 +10,7 @@ from discord.ext import commands
 import config
 from main import FunToolsBot
 import asyncio
+import logging
 
 class TestFunToolsBot(unittest.IsolatedAsyncioTestCase):
     """ボットの基本機能のテストクラス"""
@@ -22,6 +23,8 @@ class TestFunToolsBot(unittest.IsolatedAsyncioTestCase):
         self.bot._connection.user = MagicMock()
         self.bot._connection.user.id = 123456789
         self.bot._connection.user.name = "TestBot"
+        # ロガーをモック化
+        self.bot.logger = MagicMock()
 
     @patch('discord.Client.login')
     async def test_bot_initialization(self, mock_login):
@@ -42,7 +45,7 @@ class TestFunToolsBot(unittest.IsolatedAsyncioTestCase):
         await self.bot.setup_hook()
 
         # 検証
-        self.assertTrue(mock_load_extension.called)
+        self.assertEqual(mock_load_extension.call_count, len(self.bot.initial_extensions))
         self.assertTrue(self.bot.tree.sync.called)
 
     @patch('discord.Client.change_presence')
@@ -54,12 +57,13 @@ class TestFunToolsBot(unittest.IsolatedAsyncioTestCase):
         await self.bot.on_ready()
 
         # 検証
-        mock_change_presence.assert_called_once()
-        self.assertTrue(mock_change_presence.called_with(
+        mock_change_presence.assert_called_once_with(
             activity=discord.Game(name="/help でコマンド一覧")
-        ))
+        )
+        self.bot.logger.info.assert_called()
 
-    async def test_on_error(self):
+    @patch('logging.Logger.error')
+    async def test_on_error(self, mock_logger_error):
         """on_errorイベントのテスト"""
         # モックの設定
         event_method = "test_event"
@@ -68,18 +72,27 @@ class TestFunToolsBot(unittest.IsolatedAsyncioTestCase):
         # テスト実行
         await self.bot.on_error(event_method, error)
 
-    async def test_on_command_error(self):
+        # 検証
+        mock_logger_error.assert_called()
+        self.assertTrue(mock_logger_error.call_count >= 2)  # エラーメッセージとトレースバー
+
+    @patch('logging.Logger.error')
+    async def test_on_command_error(self, mock_logger_error):
         """on_command_errorイベントのテスト"""
         # モックの設定
         ctx = MagicMock()
+        ctx.send = AsyncMock()
+
+        # CommandNotFoundエラーのテスト
         error = commands.CommandNotFound()
-
-        # テスト実行
         await self.bot.on_command_error(ctx, error)
+        self.assertFalse(mock_logger_error.called)  # CommandNotFoundはログに記録しない
 
-        # 別のエラーのテスト
+        # その他のエラーのテスト
         error = Exception("Test error")
         await self.bot.on_command_error(ctx, error)
+        mock_logger_error.assert_called()
+        self.assertTrue(mock_logger_error.call_count >= 2)  # エラーメッセージとトレースバー
 
 if __name__ == '__main__':
     unittest.main() 
