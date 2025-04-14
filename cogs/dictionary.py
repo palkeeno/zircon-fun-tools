@@ -9,6 +9,7 @@ from discord.ext import commands
 import json
 import logging
 import traceback
+import os
 import config
 from difflib import get_close_matches
 
@@ -29,22 +30,22 @@ class Dictionary(commands.Cog):
             bot (commands.Bot): ボットのインスタンス
         """
         self.bot = bot
-        self.dictionary_file = "data/dictionary.json"
+        self.dictionary_file = os.path.join("data", "dictionary.json")
         self.dictionary = self.load_dictionary()
 
     def load_dictionary(self):
         """辞書データを読み込む"""
         try:
-            if not config.is_feature_enabled('load_dictionary'):
+            if not config.is_feature_enabled('dictionary'):
                 return {}
             
             if not os.path.exists(self.dictionary_file):
                 os.makedirs(os.path.dirname(self.dictionary_file), exist_ok=True)
-                with open(self.dictionary_file, 'w') as f:
-                    json.dump({}, f)
+                with open(self.dictionary_file, 'w', encoding='utf-8') as f:
+                    json.dump({}, f, ensure_ascii=False, indent=4)
                 return {}
             
-            with open(self.dictionary_file, 'r') as f:
+            with open(self.dictionary_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Error loading dictionary: {e}")
@@ -54,10 +55,10 @@ class Dictionary(commands.Cog):
     def save_dictionary(self):
         """辞書データを保存"""
         try:
-            if not config.is_feature_enabled('save_dictionary'):
+            if not config.is_feature_enabled('dictionary'):
                 return
             
-            with open(self.dictionary_file, 'w') as f:
+            with open(self.dictionary_file, 'w', encoding='utf-8') as f:
                 json.dump(self.dictionary, f, indent=4, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Error saving dictionary: {e}")
@@ -67,7 +68,7 @@ class Dictionary(commands.Cog):
     @app_commands.describe(word="追加する単語", meaning="単語の意味")
     async def add_word(self, interaction: discord.Interaction, word: str, meaning: str):
         """新しい単語を辞書に追加します"""
-        if not config.is_feature_enabled('addword'):
+        if not config.is_feature_enabled('dictionary'):
             await interaction.response.send_message(
                 "このコマンドは現在無効化されています。",
                 ephemeral=True
@@ -90,7 +91,7 @@ class Dictionary(commands.Cog):
     @app_commands.describe(word="検索する単語")
     async def search_word(self, interaction: discord.Interaction, word: str):
         """単語を検索します"""
-        if not config.is_feature_enabled('searchword'):
+        if not config.is_feature_enabled('dictionary'):
             await interaction.response.send_message(
                 "このコマンドは現在無効化されています。",
                 ephemeral=True
@@ -135,7 +136,7 @@ class Dictionary(commands.Cog):
     @app_commands.describe(word="削除する単語")
     async def delete_word(self, interaction: discord.Interaction, word: str):
         """単語を辞書から削除します"""
-        if not config.is_feature_enabled('deleteword'):
+        if not config.is_feature_enabled('dictionary'):
             await interaction.response.send_message(
                 "このコマンドは現在無効化されています。",
                 ephemeral=True
@@ -160,7 +161,7 @@ class Dictionary(commands.Cog):
     @app_commands.command(name="listwords", description="辞書に登録されている単語の一覧を表示します")
     async def list_words(self, interaction: discord.Interaction):
         """辞書に登録されている単語の一覧を表示"""
-        if not config.is_feature_enabled('listwords'):
+        if not config.is_feature_enabled('dictionary'):
             await interaction.response.send_message(
                 "このコマンドは現在無効化されています。",
                 ephemeral=True
