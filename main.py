@@ -4,14 +4,11 @@ Discordボットのメインファイル
 """
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 import config
 import logging
-import os
 import sys
 import traceback
-from dotenv import load_dotenv
 
 # ロギングの設定
 logging.basicConfig(
@@ -31,7 +28,6 @@ class FunToolsBot(commands.Bot):
         intents.message_content = True
         intents.members = True
         super().__init__(command_prefix=commands.when_mentioned_or('!'), intents=intents)
-        self.settings = config.SETTINGS
         self.initial_extensions = [
             'cogs.ramble_game',
             'cogs.birthday',
@@ -84,8 +80,8 @@ class FunToolsBot(commands.Bot):
         await self.change_presence(activity=discord.Game(name="/help でコマンド一覧"))
         
         # 機能の状態をログに出力
-        for feature, config in self.settings['features'].items():
-            status = "有効" if config['enabled'] else "無効"
+        for feature, settings in config.FEATURES.items():
+            status = "有効" if settings['enabled'] else "無効"
             logger.info(f"{feature}: {status}")
 
     async def on_error(self, event_method, *args, **kwargs):
