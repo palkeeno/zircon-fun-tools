@@ -37,7 +37,8 @@ class FunToolsBot(commands.Bot):
             'cogs.janken',
             'cogs.fortune',
             'cogs.oracle',
-            'cogs.admin'
+            'cogs.admin',
+            'cogs.lottery'
         ]
 
     async def setup_hook(self):

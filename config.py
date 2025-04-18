@@ -86,6 +86,10 @@ FEATURES = {
     "admin": {
         "enabled": True,
         "settings": {}
+    },
+    "lottery": {
+        "enabled": True, 
+        "settings": {}
     }
 }
 
