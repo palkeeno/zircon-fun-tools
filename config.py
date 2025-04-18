@@ -103,6 +103,9 @@ FEATURES = {
     }
 }
 
+# FEATURESから有効/無効状態のみを抽出した辞書
+FEATURE_STATE = {k: v["enabled"] for k, v in FEATURES.items()}
+
 # じゃんけんの設定
 JANKEN_EMOJIS = {
     'rock': '✊',
