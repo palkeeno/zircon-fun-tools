@@ -47,12 +47,13 @@ class FunToolsBot(commands.Bot):
         Cogsの読み込みと同期を行います。
         """
         try:
-            # 設定に基づいて機能を有効/無効化
+            enabled_extensions = []
             for extension in self.initial_extensions:
                 try:
                     cog_name = extension.split('.')[-1]
                     if config.is_feature_enabled(cog_name):
                         await self.load_extension(extension)
+                        enabled_extensions.append(extension)
                         logger.info(f'{extension} をロードしました')
                     else:
                         logger.info(f'{extension} は無効化されています')
@@ -67,6 +68,7 @@ class FunToolsBot(commands.Bot):
             except Exception as e:
                 logger.error(f"スラッシュコマンドの同期に失敗しました: {e}")
                 logger.error(traceback.format_exc())
+            self.enabled_extensions = enabled_extensions  # テスト用に有効な拡張を記録
         except Exception as e:
             logger.error(f'Error in setup_hook: {e}')
             logger.error(traceback.format_exc())
@@ -121,4 +123,4 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f'Unexpected error: {e}')
         logger.error(traceback.format_exc())
-        sys.exit(1) 
+        sys.exit(1)

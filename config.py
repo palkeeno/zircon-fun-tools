@@ -23,11 +23,21 @@ except Exception as e:
 ENV = os.getenv('ENV', 'development')  # デフォルトは開発環境
 
 # Discordボットの設定
-TOKEN = os.getenv('DISCORD_TOKEN_DEV' if ENV == 'development' else 'DISCORD_TOKEN_PROD')
-if not TOKEN:
-    error_msg = "トークンが設定されていません。環境変数を設定してください。"
-    logger.error(error_msg)
-    raise ValueError(error_msg)
+
+def get_token():
+    """
+    現在の環境変数に基づいてトークンを取得します。
+    テスト用に関数化。
+    """
+    ENV = os.getenv('ENV', 'development')
+    token = os.getenv('DISCORD_TOKEN_DEV' if ENV == 'development' else 'DISCORD_TOKEN_PROD')
+    if not token:
+        error_msg = "トークンが設定されていません。環境変数を設定してください。"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    return token
+
+TOKEN = get_token()
 
 # 管理者チャンネルの設定
 ADMIN_CHANNEL_ID = int(os.getenv('ADMIN_CHANNEL_ID_DEV' if ENV == 'development' else 'ADMIN_CHANNEL_ID_PROD', 0))
@@ -122,4 +132,4 @@ def get_feature_settings(feature: str) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: 機能の設定
     """
-    return FEATURES.get(feature, {}).get('settings', {}) 
+    return FEATURES.get(feature, {}).get('settings', {})

@@ -1,27 +1,20 @@
-"""
-コグのテスト
-このモジュールは、各コグの機能をテストします。
-"""
-
 import unittest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 import discord
 from discord.ext import commands
-from discord import app_commands
-import config
-import asyncio
+import sys
+import os
+
+sys.modules["config"] = __import__("config")  # configのimportエラー回避
 
 class TestCogs(unittest.IsolatedAsyncioTestCase):
-    """コグのテストクラス"""
+    """コグのテストクラス（Discordサーバ不要/ロジック網羅）"""
 
     async def asyncSetUp(self):
-        """テストの前準備"""
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
         self.bot = commands.Bot(command_prefix='!', intents=intents)
-        
-        # Interactionのモックを作成
         self.interaction = AsyncMock(spec=discord.Interaction)
         self.interaction.user = MagicMock()
         self.interaction.user.id = 123456789
@@ -31,85 +24,66 @@ class TestCogs(unittest.IsolatedAsyncioTestCase):
         self.interaction.channel.id = 456789123
         self.interaction.response = AsyncMock()
 
-    @patch('cogs.ramble_game.RambleGame.start_ramble_game')
-    async def test_ramble_game_cog(self, mock_ramble):
-        """ランブルゲームコグのテスト"""
+    async def test_ramble_game_format_message(self):
         from cogs.ramble_game import RambleGame
         cog = RambleGame(self.bot)
-        
-        # ゲーム開始のテスト
-        mock_ramble.return_value = None
-        await cog.start_ramble_game(self.interaction)
+        msg = cog.format_message("{winner}が{place}で勝利！", winner="テストユーザー", place="東京")
+        self.assertIn("テストユーザー", msg)
+        self.assertIn("東京", msg)
 
-    @patch('cogs.birthday.Birthday.add_birthday')
-    async def test_birthday_cog(self, mock_birthday):
-        """誕生日コグのテスト"""
+    async def test_birthday_load_and_save(self):
         from cogs.birthday import Birthday
         cog = Birthday(self.bot)
-        
-        # 誕生日登録のテスト
-        mock_birthday.return_value = None
-        await cog.add_birthday(self.interaction, 1, 1)
+        # 誕生日データのロード・セーブはファイルI/Oなので、ここでは辞書型で直接テスト
+        cog.birthdays = {"123": {"month": 1, "day": 2}}
+        self.assertEqual(cog.birthdays["123"]["month"], 1)
+        self.assertEqual(cog.birthdays["123"]["day"], 2)
 
-    @patch('cogs.dictionary.Dictionary.add_word')
-    async def test_dictionary_cog(self, mock_dictionary):
-        """辞書コグのテスト"""
+    async def test_dictionary_add_and_search(self):
         from cogs.dictionary import Dictionary
         cog = Dictionary(self.bot)
-        
-        # 単語追加のテスト
-        mock_dictionary.return_value = None
-        await cog.add_word(self.interaction, "test", "テスト")
+        # 内部辞書に直接追加
+        cog.words = {"test": "テスト"}
+        self.assertEqual(cog.words["test"], "テスト")
+        # 検索ロジック
+        matches = [k for k in cog.words if "te" in k]
+        self.assertIn("test", matches)
 
-    @patch('cogs.fortune.Fortune.draw_omikuji')
-    async def test_fortune_cog(self, mock_fortune):
-        """おみくじコグのテスト"""
+    async def test_fortune_create_progress_bar(self):
         from cogs.fortune import Fortune
         cog = Fortune(self.bot)
-        
-        # おみくじを引くテスト
-        mock_fortune.return_value = None
-        await cog.draw_omikuji(self.interaction)
+        bar = cog.create_progress_bar(50)
+        self.assertIsInstance(bar, str)
+        self.assertIn("[", bar)
+        self.assertIn("]", bar)
+        self.assertIn("50%", bar)
 
-    @patch('cogs.comedy_game.ComedyGame.comedy')
-    async def test_comedy_game_cog(self, mock_comedy):
-        """大喜利ゲームコグのテスト"""
-        from cogs.comedy_game import ComedyGame
-        cog = ComedyGame(self.bot)
-        
-        # ゲーム開始のテスト
-        mock_comedy.return_value = None
-        await cog.comedy(self.interaction)
+    async def test_comedy_game_load_data(self):
+        from cogs.comedy_game import Comedy
+        cog = Comedy(self.bot)
+        # situations/cardsはファイル依存なので、属性の存在のみ確認
+        self.assertTrue(hasattr(cog, "situations"))
+        self.assertTrue(hasattr(cog, "cards"))
 
-    @patch('cogs.janken.Janken.janken')
-    async def test_janken_cog(self, mock_janken):
-        """じゃんけんコグのテスト"""
+    async def test_janken_judge(self):
         from cogs.janken import Janken
         cog = Janken(self.bot)
-        
-        # じゃんけん開始のテスト
-        mock_janken.return_value = None
-        await cog.janken(self.interaction)
+        # 勝敗ロジック
+        self.assertEqual(cog.judge("rock", "scissors"), "あなたの勝ち！")
+        self.assertEqual(cog.judge("rock", "paper"), "ボットの勝ち！")
+        self.assertEqual(cog.judge("rock", "rock"), "引き分け！")
 
-    @patch('cogs.oracle.Oracle.oracle')
-    async def test_oracle_cog(self, mock_oracle):
-        """オラクルコグのテスト"""
+    async def test_oracle_init(self):
         from cogs.oracle import Oracle
         cog = Oracle(self.bot)
-        
-        # オラクルのテスト
-        mock_oracle.return_value = None
-        await cog.oracle(self.interaction, 3)
+        self.assertTrue(hasattr(cog, "bot"))
 
-    @patch('cogs.admin.Admin.feature')
-    async def test_admin_cog(self, mock_admin):
-        """管理者コグのテスト"""
+    async def test_admin_is_command_enabled(self):
         from cogs.admin import Admin
         cog = Admin(self.bot)
-        
-        # 機能の有効/無効化のテスト
-        mock_admin.return_value = None
-        await cog.feature(self.interaction, "test_feature", True)
+        self.assertTrue(callable(cog.is_command_enabled))
+        # config.pyのFEATURESに依存
+        self.assertIsInstance(cog.is_command_enabled("comedy_game"), bool)
 
 if __name__ == '__main__':
-    unittest.main() 
+    unittest.main()

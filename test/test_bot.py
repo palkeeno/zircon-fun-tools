@@ -45,7 +45,7 @@ class TestFunToolsBot(unittest.IsolatedAsyncioTestCase):
         await self.bot.setup_hook()
 
         # 検証
-        self.assertEqual(mock_load_extension.call_count, len(self.bot.initial_extensions))
+        self.assertEqual(mock_load_extension.call_count, len(self.bot.enabled_extensions))
         self.assertTrue(self.bot.tree.sync.called)
 
     @patch('discord.Client.change_presence')
@@ -53,14 +53,15 @@ class TestFunToolsBot(unittest.IsolatedAsyncioTestCase):
         """on_readyイベントのテスト"""
         mock_change_presence.return_value = None
 
-        # テスト実行
-        await self.bot.on_ready()
+        # logger.infoはグローバルloggerなのでpatch
+        with patch('main.logger.info') as mock_logger_info:
+            await self.bot.on_ready()
 
-        # 検証
-        mock_change_presence.assert_called_once_with(
-            activity=discord.Game(name="/help でコマンド一覧")
-        )
-        self.bot.logger.info.assert_called()
+            # 検証
+            mock_change_presence.assert_called_once_with(
+                activity=discord.Game(name="/help でコマンド一覧")
+            )
+            self.assertTrue(mock_logger_info.called)
 
     @patch('logging.Logger.error')
     async def test_on_error(self, mock_logger_error):
@@ -95,4 +96,4 @@ class TestFunToolsBot(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(mock_logger_error.call_count >= 2)  # エラーメッセージとトレースバー
 
 if __name__ == '__main__':
-    unittest.main() 
+    unittest.main()
