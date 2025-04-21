@@ -64,6 +64,15 @@ class Dictionary(commands.Cog):
             logger.error(f"Error saving dictionary: {e}")
             logger.error(traceback.format_exc())
 
+    async def _is_operator(self, interaction: discord.Interaction) -> bool:
+        """
+        運営ロールIDで判定します。
+        """
+        from config import OPERATOR_ROLE_ID
+        if not OPERATOR_ROLE_ID or not hasattr(interaction.user, "roles"):
+            return False
+        return any(role.id == OPERATOR_ROLE_ID for role in interaction.user.roles)
+
     @app_commands.command(name="addword", description="新しい単語を辞書に追加します")
     @app_commands.describe(word="追加する単語", meaning="単語の意味")
     async def add_word(self, interaction: discord.Interaction, word: str, meaning: str):
@@ -73,6 +82,10 @@ class Dictionary(commands.Cog):
                 "このコマンドは現在無効化されています。",
                 ephemeral=True
             )
+            return
+
+        if not await self._is_operator(interaction):
+            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
             return
 
         try:
@@ -96,6 +109,10 @@ class Dictionary(commands.Cog):
                 "このコマンドは現在無効化されています。",
                 ephemeral=True
             )
+            return
+
+        if not await self._is_operator(interaction):
+            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
             return
 
         try:
@@ -143,6 +160,10 @@ class Dictionary(commands.Cog):
             )
             return
 
+        if not await self._is_operator(interaction):
+            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+            return
+
         try:
             if word in self.dictionary:
                 del self.dictionary[word]
@@ -166,6 +187,10 @@ class Dictionary(commands.Cog):
                 "このコマンドは現在無効化されています。",
                 ephemeral=True
             )
+            return
+
+        if not await self._is_operator(interaction):
+            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
             return
 
         try:
@@ -217,4 +242,4 @@ async def setup(bot: commands.Bot):
     except Exception as e:
         logger.error(f"Failed to load Dictionary cog: {e}")
         logger.error(traceback.format_exc())
-        raise 
+        raise

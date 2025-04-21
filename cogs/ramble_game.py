@@ -134,33 +134,24 @@ class RambleGame(commands.Cog):
             self.game = game
             self.add_item(game.JoinButton())
 
-    async def cog_check(self, ctx: commands.Context) -> bool:
+    async def _is_operator(self, interaction: discord.Interaction) -> bool:
         """
-        コマンド実行前のチェックを行います。
-        管理者チャンネルでのみ実行可能です。
-        
-        Args:
-            ctx (commands.Context): コマンドのコンテキスト
-            
-        Returns:
-            bool: コマンドを実行可能な場合はTrue、そうでない場合はFalse
+        運営ロールIDで判定します。
         """
-        if not config.is_admin_channel(ctx.channel.id):
-            await ctx.send("このコマンドは管理者チャンネルでのみ実行可能です。", ephemeral=True)
+        from config import OPERATOR_ROLE_ID
+        if not OPERATOR_ROLE_ID or not hasattr(interaction.user, "roles"):
             return False
-        return True
+        return any(role.id == OPERATOR_ROLE_ID for role in interaction.user.roles)
 
     @app_commands.command(
-        name="ramble",
+        name="ramble_game",
         description="ランブルゲームを開始します"
     )
-    async def start_ramble_game(self, interaction: discord.Interaction):
-        """
-        ランブルゲームを開始します。
-        
-        Args:
-            interaction (discord.Interaction): インタラクション
-        """
+    async def ramble_game(self, interaction: discord.Interaction):
+        if not await self._is_operator(interaction):
+            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+            return
+
         if not config.is_feature_enabled('ramble'):
             await interaction.response.send_message(
                 "このコマンドは現在無効化されています。",
@@ -424,4 +415,4 @@ async def setup(bot: commands.Bot):
     except Exception as e:
         logger.error(f"Failed to load RambleGame cog: {e}")
         logger.error(traceback.format_exc())
-        raise 
+        raise

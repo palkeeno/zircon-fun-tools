@@ -44,6 +44,11 @@ ADMIN_CHANNEL_ID = int(os.getenv('ADMIN_CHANNEL_ID_DEV' if ENV == 'development' 
 if not ADMIN_CHANNEL_ID:
     logger.warning("管理者チャンネルIDが設定されていません。管理者コマンドは使用できません。")
 
+# 運営ロールIDの設定
+OPERATOR_ROLE_ID = int(os.getenv('OPERATOR_ROLE_ID_DEV' if ENV == 'development' else 'OPERATOR_ROLE_ID_DEV', '0'))  # 0は未設定扱い
+if not OPERATOR_ROLE_ID:
+    logger.warning("運営ロールが設定されていません。運営ロールが必要なコマンドは使用できません。")
+
 # 機能の設定
 FEATURES = {
     "ramble_game": {

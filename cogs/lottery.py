@@ -18,6 +18,15 @@ class Lottery(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    async def _is_operator(self, interaction: discord.Interaction) -> bool:
+        """
+        運営ロールIDで判定します。
+        """
+        from config import OPERATOR_ROLE_ID
+        if not OPERATOR_ROLE_ID or not hasattr(interaction.user, "roles"):
+            return False
+        return any(role.id == OPERATOR_ROLE_ID for role in interaction.user.roles)
+
     @app_commands.command(
         name="lottery",
         description="指定したロールから指定人数を順番に抽選します"
@@ -35,6 +44,10 @@ class Lottery(commands.Cog):
         exclude_role: discord.Role = None
     ):
         try:
+            if not await self._is_operator(interaction):
+                await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+                return
+
             if not config.is_feature_enabled('lottery'):
                 await interaction.response.send_message("現在抽選機能は無効化されています。", ephemeral=True)
                 return

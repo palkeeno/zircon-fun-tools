@@ -28,22 +28,6 @@ class Admin(commands.Cog):
         """
         self.bot = bot
 
-    async def cog_check(self, ctx: commands.Context) -> bool:
-        """
-        コマンド実行前のチェックを行います。
-        管理者チャンネルでのみ実行可能です。
-        
-        Args:
-            ctx (commands.Context): コマンドのコンテキスト
-            
-        Returns:
-            bool: コマンドを実行可能な場合はTrue、そうでない場合はFalse
-        """
-        if not config.is_admin_channel(ctx.channel.id):
-            await ctx.send("このコマンドは管理者チャンネルでのみ実行可能です。", ephemeral=True)
-            return False
-        return True
-
     @app_commands.command(
         name="feature",
         description="特定の機能を有効化/無効化します"
@@ -116,8 +100,8 @@ class Admin(commands.Cog):
     @app_commands.command(name="enable_command", description="スラッシュコマンドを有効化します")
     @app_commands.describe(command="有効化するコマンド名")
     async def enable_command(self, interaction: discord.Interaction, command: str):
-        if not await self._is_admin(interaction):
-            await interaction.response.send_message("このコマンドは管理者のみ使用できます。", ephemeral=True)
+        if not await self._is_operator(interaction):
+            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
             return
 
         if command not in config.FEATURE_STATE:
@@ -131,8 +115,8 @@ class Admin(commands.Cog):
     @app_commands.command(name="disable_command", description="スラッシュコマンドを無効化します")
     @app_commands.describe(command="無効化するコマンド名")
     async def disable_command(self, interaction: discord.Interaction, command: str):
-        if not await self._is_admin(interaction):
-            await interaction.response.send_message("このコマンドは管理者のみ使用できます。", ephemeral=True)
+        if not await self._is_operator(interaction):
+            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
             return
 
         if command not in config.FEATURE_STATE:
@@ -145,8 +129,8 @@ class Admin(commands.Cog):
 
     @app_commands.command(name="list_commands", description="スラッシュコマンドの状態を一覧表示します")
     async def list_commands(self, interaction: discord.Interaction):
-        if not await self._is_admin(interaction):
-            await interaction.response.send_message("このコマンドは管理者のみ使用できます。", ephemeral=True)
+        if not await self._is_operator(interaction):
+            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
             return
 
         embed = discord.Embed(title="スラッシュコマンドの状態", color=discord.Color.blue())
@@ -171,8 +155,14 @@ class Admin(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    async def _is_admin(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.guild_permissions.administrator
+    async def _is_operator(self, interaction: discord.Interaction) -> bool:
+        """
+        運営ロールIDで判定します。
+        """
+        operator_role_id = getattr(config, "OPERATOR_ROLE_ID", 0)
+        if not operator_role_id or not hasattr(interaction.user, "roles"):
+            return False
+        return any(role.id == operator_role_id for role in interaction.user.roles)
 
     def is_command_enabled(self, command_name: str) -> bool:
         return config.is_feature_enabled(command_name)
@@ -190,4 +180,4 @@ async def setup(bot: commands.Bot):
     except Exception as e:
         logger.error(f"Failed to load Admin cog: {e}")
         logger.error(traceback.format_exc())
-        raise 
+        raise
