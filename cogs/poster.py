@@ -12,6 +12,7 @@ import traceback
 import config
 import json
 import os
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -141,28 +142,34 @@ class Poster(commands.Cog):
                 time.sleep(3)
                 html = driver.page_source.encode("utf-8")
                 soup = BeautifulSoup(html, "html.parser")
-                info = {
-                    'name': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(1) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(1) > dd > p") else '',
-                    'country': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(3) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(3) > dd > p") else '',
-                    'skill': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(4) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(4) > dd > p") else '',
-                    'sencetype': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(5) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(5) > dd > p") else '',
-                    'personality': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(6) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(6) > dd > p") else '',
-                    'goal': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(7) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(7) > dd > p") else '',
-                    'zirpower': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(8) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(8) > dd > p") else '',
-                    'zircongear': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(9) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(9) > dd > p") else '',
-                    'firstperson': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(10) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(10) > dd > p") else '',
-                    'nickname': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(11) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(11) > dd > p") else '',
-                    'lines': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(12) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(12) > dd > p") else '',
-                    'weakness': soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(13) > dd > p").text if soup.select_one("#root > main > div > section.status > div > dl:nth-of-type(13) > dd > p") else '',
-                    'background': soup.select_one("#root > main > div > section.property > table > tbody > tr:nth-of-type(15) > td:nth-of-type(3)").text if soup.select_one("#root > main > div > section.property > table > tbody > tr:nth-of-type(15) > td:nth-of-type(3)") else '',
+                selectors = {
+                    'name': "#root > main > div > section.status > div > dl:nth-of-type(1) > dd > p",
+                    'country': "#root > main > div > section.status > div > dl:nth-of-type(3) > dd > p",
+                    'skill': "#root > main > div > section.status > div > dl:nth-of-type(4) > dd > p",
+                    'sencetype': "#root > main > div > section.status > div > dl:nth-of-type(5) > dd > p",
+                    'personality': "#root > main > div > section.status > div > dl:nth-of-type(6) > dd > p",
+                    'goal': "#root > main > div > section.status > div > dl:nth-of-type(7) > dd > p",
+                    'zirpower': "#root > main > div > section.status > div > dl:nth-of-type(8) > dd > p",
+                    'zircongear': "#root > main > div > section.status > div > dl:nth-of-type(9) > dd > p",
+                    'firstperson': "#root > main > div > section.status > div > dl:nth-of-type(10) > dd > p",
+                    'nickname': "#root > main > div > section.status > div > dl:nth-of-type(11) > dd > p",
+                    'lines': "#root > main > div > section.status > div > dl:nth-of-type(12) > dd > p",
+                    'weakness': "#root > main > div > section.status > div > dl:nth-of-type(13) > dd > p",
+                    'background': "#root > main > div > section.property > table > tbody > tr:nth-of-type(15) > td:nth-of-type(3)"
                 }
+                info = {}
+                for key, selector in selectors.items():
+                    el = soup.select_one(selector)
+                    info[key] = el.text if el else ''
             except Exception as e:
                 logger.error(f"Selenium/スクレイピングに失敗: {e}")
                 await interaction.followup.send("キャラクター情報の取得に失敗しました。番号が正しいか、または公式サイトの仕様変更がないかご確認ください。", ephemeral=True)
                 return
             try:
                 poster_img = self._draw_poster(char, card, mask, peaceful, brave, glory, freedom, info)
-                poster_img.save(self.dst_path)
+                img_bytes = io.BytesIO()
+                poster_img.save(img_bytes, format='PNG')
+                img_bytes.seek(0)
             except Exception as e:
                 logger.error(f"画像合成・保存に失敗: {e}")
                 await interaction.followup.send("画像の合成または保存に失敗しました。管理者に連絡してください。", ephemeral=True)
@@ -170,7 +177,8 @@ class Poster(commands.Cog):
             channel = self.bot.get_channel(self.channel_id)
             if channel:
                 try:
-                    await channel.send(file=discord.File(self.dst_path))
+                    filename = f"poster_{number}.png"
+                    await channel.send(file=discord.File(img_bytes, filename=filename))
                 except Exception as e:
                     logger.error(f"Discordへの画像送信に失敗: {e}")
                     await interaction.followup.send("画像の送信に失敗しました。管理者に連絡してください。", ephemeral=True)
