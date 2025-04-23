@@ -49,6 +49,20 @@ OPERATOR_ROLE_ID = int(os.getenv('OPERATOR_ROLE_ID_DEV' if ENV == 'development' 
 if not OPERATOR_ROLE_ID:
     logger.warning("運営ロールが設定されていません。運営ロールが必要なコマンドは使用できません。")
 
+# Posterコマンド用の画像・フォント・チャンネル設定
+POSTER_CARD_PATH = os.getenv('POSTER_CARD_PATH', 'card.png')
+POSTER_MASK_PATH = os.getenv('POSTER_MASK_PATH', 'mask.png')
+POSTER_PEACEFUL_PATH = os.getenv('POSTER_PEACEFUL_PATH', 'peaceful.png')
+POSTER_BRAVE_PATH = os.getenv('POSTER_BRAVE_PATH', 'brave.png')
+POSTER_GLORY_PATH = os.getenv('POSTER_GLORY_PATH', 'glory.png')
+POSTER_FREEDOM_PATH = os.getenv('POSTER_FREEDOM_PATH', 'freedom.png')
+POSTER_DST_PATH = os.getenv('POSTER_DST_PATH', 'poster_output.png')
+POSTER_FONT_A = os.getenv('POSTER_FONT_A', 'ヒラギノ明朝 ProN.ttc')
+POSTER_FONT_B = os.getenv('POSTER_FONT_B', 'ヒラギノ明朝 ProN.ttc')
+POSTER_FONT_C = os.getenv('POSTER_FONT_C', 'ヒラギノ明朝 ProN.ttc')
+POSTER_FONT_D = os.getenv('POSTER_FONT_D', 'ヒラギノ明朝 ProN.ttc')
+POSTER_CHANNEL_ID = int(os.getenv('POSTER_CHANNEL_ID', '0'))
+
 # 機能の設定
 FEATURES = {
     "ramble_game": {

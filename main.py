@@ -38,7 +38,8 @@ class FunToolsBot(commands.Bot):
             'cogs.fortune',
             'cogs.oracle',
             'cogs.admin',
-            'cogs.lottery'
+            'cogs.lottery',
+            'cogs.poster'  # ← posterコグを追加
         ]
 
     async def setup_hook(self):
