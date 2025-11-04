@@ -47,7 +47,6 @@ class TestConfig(unittest.TestCase):
         import config
 
 
-        self.assertTrue(config.is_feature_enabled('janken'))
         self.assertFalse(config.is_feature_enabled('birthday'))
         self.assertFalse(config.is_feature_enabled('dictionary'))
         self.assertFalse(config.is_feature_enabled('omikuji'))

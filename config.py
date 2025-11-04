@@ -83,12 +83,7 @@ FEATURES = {
     },
 
 
-    "janken": {
-        "enabled": True,
-        "settings": {
-            "timeout": 30
-        }
-    },
+
     "oracle": {
         "enabled": True,
         "settings": {

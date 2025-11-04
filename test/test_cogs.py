@@ -46,13 +46,6 @@ class TestCogs(unittest.IsolatedAsyncioTestCase):
 
 
 
-    async def test_janken_judge(self):
-        from cogs.janken import Janken
-        cog = Janken(self.bot)
-        # 勝敗ロジック
-        self.assertEqual(cog.judge("rock", "scissors"), "あなたの勝ち！")
-        self.assertEqual(cog.judge("rock", "paper"), "ボットの勝ち！")
-        self.assertEqual(cog.judge("rock", "rock"), "引き分け！")
 
     async def test_oracle_init(self):
         from cogs.oracle import Oracle

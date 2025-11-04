@@ -32,7 +32,6 @@ class FunToolsBot(commands.Bot):
             'cogs.birthday',
             'cogs.dictionary',
             'cogs.omikuji',
-            'cogs.janken',
             'cogs.oracle',
             'cogs.admin',
             'cogs.lottery',
