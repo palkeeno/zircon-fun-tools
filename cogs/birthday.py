@@ -5,45 +5,96 @@
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 import json
 import logging
 import traceback
+import datetime
+import os
 import config
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
 
 class Birthday(commands.Cog):
+    """
+    誕生日管理のコグ
+    誕生日の管理機能を提供します。
+    """
+    
+    def __init__(self, bot: commands.Bot):
+        """
+        誕生日管理のコグを初期化します。
+        
+        Args:
+            bot (commands.Bot): ボットのインスタンス
+        """
+        self.bot = bot
+        self.birthdays = []
+        self.birthday_task_started = False
+        self.load_birthdays()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        if not hasattr(self, 'birthday_task_started'):
+        """ボットの準備が完了したときに誕生日タスクを開始します"""
+        if not self.birthday_task_started and config.is_feature_enabled('birthday'):
             self.birthday_task.start()
             self.birthday_task_started = True
 
-    from discord.ext import tasks
-    @tasks.loop(time=config.get_birthday_announce_time())
+    @tasks.loop(hours=24)
     async def birthday_task(self):
-        import datetime
+        """毎日誕生日をチェックして通知するタスク"""
         now = datetime.datetime.now()
         today_month = now.month
         today_day = now.day
+        
         # 今日誕生日の人を抽出
         today_birthdays = [b for b in self.birthdays if b["month"] == today_month and b["day"] == today_day]
         if not today_birthdays:
             return
+            
         try:
             channel_id = config.get_birthday_channel_id()
+            if not channel_id:
+                logger.warning("誕生日チャンネルIDが設定されていません")
+                return
+                
             channel = self.bot.get_channel(channel_id)
             if channel is None:
                 logger.error(f"誕生日チャンネルが見つかりません: {channel_id}")
                 return
+                
             names = ', '.join([b["name"] for b in today_birthdays])
             msg = f"🎉 今日は {names} さんの誕生日です！おめでとうございます！ 🎉"
             await channel.send(msg)
         except Exception as e:
             logger.error(f"Error in birthday_task: {e}")
+            logger.error(traceback.format_exc())
+
+    def load_birthdays(self):
+        """誕生日データを読み込みます（リスト形式）。dataフォルダがなければ作成。"""
+        os.makedirs("data", exist_ok=True)
+        try:
+            if not os.path.exists("data/birthdays.json"):
+                with open("data/birthdays.json", "w", encoding="utf-8") as f:
+                    json.dump([], f, ensure_ascii=False, indent=2)
+            with open("data/birthdays.json", "r", encoding="utf-8") as f:
+                self.birthdays = json.load(f)
+                if not isinstance(self.birthdays, list):
+                    self.birthdays = []
+        except Exception as e:
+            logger.error(f"Error loading birthdays: {e}")
+            logger.error(traceback.format_exc())
+            self.birthdays = []
+
+    def save_birthdays(self):
+        """誕生日データを保存します（リスト形式）。dataフォルダがなければ作成。"""
+        os.makedirs("data", exist_ok=True)
+        try:
+            with open("data/birthdays.json", "w", encoding="utf-8") as f:
+                json.dump(self.birthdays, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving birthdays: {e}")
             logger.error(traceback.format_exc())
 
     @app_commands.command(
@@ -56,11 +107,12 @@ class Birthday(commands.Cog):
     async def remove_birthday(self, interaction: discord.Interaction, name: str):
         """
         名前で誕生日を削除。複数候補時はリスト表示し、番号指定で削除。
+        
         Args:
             interaction (discord.Interaction): インタラクション
             name (str): 削除したい名前
         """
-        if not config.is_feature_enabled('removebirthday'):
+        if not config.is_feature_enabled('birthday'):
             await interaction.response.send_message(
                 "このコマンドは現在無効化されています。",
                 ephemeral=True
@@ -76,6 +128,7 @@ class Birthday(commands.Cog):
                     ephemeral=True
                 )
                 return
+                
             if len(candidates) == 1:
                 self.birthdays.remove(candidates[0])
                 self.save_birthdays()
@@ -100,7 +153,10 @@ class Birthday(commands.Cog):
                 if 1 <= num <= len(candidates):
                     self.birthdays.remove(candidates[num-1])
                     self.save_birthdays()
-                    await interaction.followup.send(f"{candidates[num-1]['name']}({candidates[num-1]['month']}月{candidates[num-1]['day']}日) の誕生日を削除しました。", ephemeral=True)
+                    await interaction.followup.send(
+                        f"{candidates[num-1]['name']}({candidates[num-1]['month']}月{candidates[num-1]['day']}日) の誕生日を削除しました。",
+                        ephemeral=True
+                    )
                 else:
                     await interaction.followup.send("無効な番号です。削除を中止しました。", ephemeral=True)
             except Exception:
@@ -112,49 +168,6 @@ class Birthday(commands.Cog):
                 "エラーが発生しました。もう一度お試しください。",
                 ephemeral=True
             )
-    """
-    誕生日管理のコグ
-    誕生日の管理機能を提供します。
-    """
-    
-    def __init__(self, bot: commands.Bot):
-        """
-        誕生日管理のコグを初期化します。
-        
-        Args:
-            bot (commands.Bot): ボットのインスタンス
-        """
-        self.bot = bot
-        self.birthdays = []
-        self.load_birthdays()
-
-    def load_birthdays(self):
-        """誕生日データを読み込みます（リスト形式）。dataフォルダがなければ作成。"""
-        import os
-        os.makedirs("data", exist_ok=True)
-        try:
-            if not os.path.exists("data/birthdays.json"):
-                with open("data/birthdays.json", "w", encoding="utf-8") as f:
-                    json.dump([], f, ensure_ascii=False, indent=2)
-            with open("data/birthdays.json", "r", encoding="utf-8") as f:
-                self.birthdays = json.load(f)
-                if not isinstance(self.birthdays, list):
-                    self.birthdays = []
-        except Exception as e:
-            logger.error(f"Error loading birthdays: {e}")
-            logger.error(traceback.format_exc())
-            self.birthdays = []
-
-    def save_birthdays(self):
-        """誕生日データを保存します（リスト形式）。dataフォルダがなければ作成。"""
-        import os
-        os.makedirs("data", exist_ok=True)
-        try:
-            with open("data/birthdays.json", "w", encoding="utf-8") as f:
-                json.dump(self.birthdays, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving birthdays: {e}")
-            logger.error(traceback.format_exc())
 
     @app_commands.command(
         name="addbirthday",
@@ -168,13 +181,14 @@ class Birthday(commands.Cog):
     async def add_birthday(self, interaction: discord.Interaction, name: str, month: int, day: int):
         """
         誕生日を登録します。名前＋月日で保存。
+        
         Args:
             interaction (discord.Interaction): インタラクション
             name (str): 名前
             month (int): 月
             day (int): 日
         """
-        if not config.is_feature_enabled('addbirthday'):
+        if not config.is_feature_enabled('birthday'):
             await interaction.response.send_message(
                 "このコマンドは現在無効化されています。",
                 ephemeral=True

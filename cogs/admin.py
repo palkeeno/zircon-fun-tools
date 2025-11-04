@@ -105,9 +105,6 @@ class Admin(commands.Cog):
         logger.info("Disabled command: %s", command_name)
         await interaction.response.send_message(f"コマンド '{command_name}' を無効化しました。", ephemeral=True)
 
-    def is_command_enabled(self, command_name: str) -> bool:
-        return config.is_feature_enabled(command_name)
-
 
 async def setup(bot: commands.Bot):
     """Cog を bot に追加します。"""

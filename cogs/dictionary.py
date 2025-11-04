@@ -11,7 +11,6 @@ import logging
 import traceback
 import os
 import config
-from difflib import get_close_matches
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
@@ -100,18 +99,18 @@ class Dictionary(commands.Cog):
                 ephemeral=True
             )
 
-    def _calculate_relevance_score(self, word: str, entry: tuple[str, str]) -> tuple[float, int]:
+    def _calculate_relevance_score(self, word: str, title: str, description: str) -> tuple[float, int]:
         """
         検索結果の関連性スコアを計算します。
 
         Args:
             word (str): 検索キーワード
-            entry (tuple): (見出し語, 説明文)のタプル
+            title (str): 見出し語
+            description (str): 説明文
 
         Returns:
             tuple[float, int]: (スコア, キーワード出現回数)
         """
-        title, description = entry
         keyword_lower = word.lower()
         title_lower = title.lower()
         description_lower = description.lower()
@@ -129,9 +128,12 @@ class Dictionary(commands.Cog):
             return (60.0, description.count(word))
 
         # あいまい検索の場合（見出し語のみ）
-        title_similarity = max((i for i in range(len(keyword_lower) + 1) 
-                              if keyword_lower[:i] in title_lower), default=0)
-        return (float(title_similarity) / len(keyword_lower) * 40.0, 0)
+        if len(keyword_lower) > 0:
+            title_similarity = max((i for i in range(len(keyword_lower) + 1) 
+                                  if keyword_lower[:i] in title_lower), default=0)
+            return (float(title_similarity) / len(keyword_lower) * 40.0, 0)
+        
+        return (0.0, 0)
 
     class DictionaryPaginator(discord.ui.View):
         def __init__(self, search_results: list, items_per_page: int = 5, timeout: float = 180):
@@ -219,11 +221,11 @@ class Dictionary(commands.Cog):
                 # 完全一致または部分一致
                 if (word.lower() in title.lower() or
                     word.lower() in description.lower()):
-                    score, count = self._calculate_relevance_score((title, description))
+                    score, count = self._calculate_relevance_score(word, title, description)
                     search_results.append((title, description, score, count))
                 # あいまい検索が有効な場合
                 elif fuzzy:
-                    score, count = self._calculate_relevance_score((title, description))
+                    score, count = self._calculate_relevance_score(word, title, description)
                     if score > 0:
                         search_results.append((title, description, score, count))
 

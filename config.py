@@ -49,6 +49,11 @@ OPERATOR_ROLE_ID = int(os.getenv('OPERATOR_ROLE_ID_DEV' if ENV == 'development' 
 if not OPERATOR_ROLE_ID:
     logger.warning("運営ロールが設定されていません。運営ロールが必要なコマンドは使用できません。")
 
+# Birthday機能の設定
+BIRTHDAY_CHANNEL_ID = int(os.getenv('BIRTHDAY_CHANNEL_ID_DEV' if ENV == 'development' else 'BIRTHDAY_CHANNEL_ID_PROD', '0'))
+BIRTHDAY_ANNOUNCE_TIME_HOUR = int(os.getenv('BIRTHDAY_ANNOUNCE_TIME_HOUR', '9'))
+BIRTHDAY_ANNOUNCE_TIME_MINUTE = int(os.getenv('BIRTHDAY_ANNOUNCE_TIME_MINUTE', '0'))
+
 # Posterコマンド用の画像・フォント・チャンネル設定
 POSTER_CARD_PATH = os.getenv('POSTER_CARD_PATH', 'card.png')
 POSTER_MASK_PATH = os.getenv('POSTER_MASK_PATH', 'mask.png')
@@ -57,33 +62,29 @@ POSTER_BRAVE_PATH = os.getenv('POSTER_BRAVE_PATH', 'brave.png')
 POSTER_GLORY_PATH = os.getenv('POSTER_GLORY_PATH', 'glory.png')
 POSTER_FREEDOM_PATH = os.getenv('POSTER_FREEDOM_PATH', 'freedom.png')
 POSTER_DST_PATH = os.getenv('POSTER_DST_PATH', 'poster_output.png')
-POSTER_FONT_A = os.getenv('POSTER_FONT_A', 'ヒラギノ明朝 ProN.ttc')
-POSTER_FONT_B = os.getenv('POSTER_FONT_B', 'ヒラギノ明朝 ProN.ttc')
-POSTER_FONT_C = os.getenv('POSTER_FONT_C', 'ヒラギノ明朝 ProN.ttc')
-POSTER_FONT_D = os.getenv('POSTER_FONT_D', 'ヒラギノ明朝 ProN.ttc')
+POSTER_FONT_A = os.getenv('POSTER_FONT_A', 'ヒラギノ明朝 ProN.ttc')
+POSTER_FONT_B = os.getenv('POSTER_FONT_B', 'ヒラギノ明朝 ProN.ttc')
+POSTER_FONT_C = os.getenv('POSTER_FONT_C', 'ヒラギノ明朝 ProN.ttc')
+POSTER_FONT_D = os.getenv('POSTER_FONT_D', 'ヒラギノ明朝 ProN.ttc')
 POSTER_CHANNEL_ID = int(os.getenv('POSTER_CHANNEL_ID', '0'))
 
 # 機能の設定
 FEATURES = {
-
     "birthday": {
-        "enabled": False,
+        "enabled": True,
         "settings": {
             "notification_time": "09:00",
             "timezone": "Asia/Tokyo"
         }
     },
     "dictionary": {
-        "enabled": False,
+        "enabled": True,
         "settings": {
             "max_words": 1000,
             "search_limit": 10,
             "fuzzy_search": True
         }
     },
-
-
-
     "oracle": {
         "enabled": True,
         "settings": {
@@ -106,13 +107,6 @@ FEATURES = {
 
 # FEATURESから有効/無効状態のみを抽出した辞書
 FEATURE_STATE = {k: v["enabled"] for k, v in FEATURES.items()}
-
-# じゃんけんの設定
-JANKEN_EMOJIS = {
-    'rock': '✊',
-    'scissors': '✌️',
-    'paper': '✋'
-}
 
 def is_feature_enabled(feature: str) -> bool:
     """
@@ -137,3 +131,22 @@ def get_feature_settings(feature: str) -> Dict[str, Any]:
         Dict[str, Any]: 機能の設定
     """
     return FEATURES.get(feature, {}).get('settings', {})
+
+def get_birthday_announce_time():
+    """
+    誕生日通知の時刻を取得します。
+    
+    Returns:
+        datetime.time: 誕生日通知の時刻
+    """
+    import datetime
+    return datetime.time(hour=BIRTHDAY_ANNOUNCE_TIME_HOUR, minute=BIRTHDAY_ANNOUNCE_TIME_MINUTE)
+
+def get_birthday_channel_id() -> int:
+    """
+    誕生日通知チャンネルのIDを取得します。
+    
+    Returns:
+        int: 誕生日通知チャンネルのID
+    """
+    return BIRTHDAY_CHANNEL_ID

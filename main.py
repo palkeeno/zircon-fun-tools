@@ -7,8 +7,9 @@ import discord
 from discord.ext import commands
 import config
 import logging
-import sys
 import traceback
+import sys
+import asyncio
 
 # ロギングの設定
 logging.basicConfig(
@@ -31,7 +32,6 @@ class FunToolsBot(commands.Bot):
         self.initial_extensions = [
             'cogs.birthday',
             'cogs.dictionary',
-            'cogs.omikuji',
             'cogs.oracle',
             'cogs.admin',
             'cogs.lottery',
@@ -112,7 +112,6 @@ if __name__ == '__main__':
             async with bot:
                 await bot.start(config.TOKEN)
 
-        import asyncio
         asyncio.run(main())
     except discord.LoginFailure:
         logger.error('Invalid token provided. Please check your token in the .env file.')

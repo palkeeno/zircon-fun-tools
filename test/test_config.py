@@ -5,8 +5,6 @@
 
 import unittest
 import os
-from unittest.mock import patch
-import importlib
 
 class TestConfig(unittest.TestCase):
     """設定ファイルのテストクラス（ユニットテスト向けに修正）"""
@@ -46,10 +44,9 @@ class TestConfig(unittest.TestCase):
     def test_is_feature_enabled(self):
         import config
 
-
-        self.assertFalse(config.is_feature_enabled('birthday'))
-        self.assertFalse(config.is_feature_enabled('dictionary'))
-        self.assertFalse(config.is_feature_enabled('omikuji'))
+        self.assertTrue(config.is_feature_enabled('birthday'))
+        self.assertTrue(config.is_feature_enabled('dictionary'))
+        self.assertTrue(config.is_feature_enabled('oracle'))
         self.assertFalse(config.is_feature_enabled('nonexistent_feature'))
 
     def test_get_feature_settings(self):
