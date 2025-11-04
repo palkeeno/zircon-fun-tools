@@ -29,17 +29,15 @@ class FunToolsBot(commands.Bot):
         intents.members = True
         super().__init__(command_prefix=commands.when_mentioned_or('!'), intents=intents)
         self.initial_extensions = [
-            'cogs.ramble_game',
             'cogs.birthday',
             'cogs.dictionary',
             'cogs.omikuji',
             'cogs.comedy_game',
             'cogs.janken',
-            'cogs.fortune',
             'cogs.oracle',
             'cogs.admin',
             'cogs.lottery',
-            'cogs.poster'  # ← posterコグを追加
+            'cogs.poster'
         ]
 
     async def setup_hook(self):

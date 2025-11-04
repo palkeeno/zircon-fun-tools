@@ -24,12 +24,6 @@ class TestCogs(unittest.IsolatedAsyncioTestCase):
         self.interaction.channel.id = 456789123
         self.interaction.response = AsyncMock()
 
-    async def test_ramble_game_format_message(self):
-        from cogs.ramble_game import RambleGame
-        cog = RambleGame(self.bot)
-        msg = cog.format_message("{winner}が{place}で勝利！", winner="テストユーザー", place="東京")
-        self.assertIn("テストユーザー", msg)
-        self.assertIn("東京", msg)
 
     async def test_birthday_load_and_save(self):
         from cogs.birthday import Birthday
@@ -49,14 +43,7 @@ class TestCogs(unittest.IsolatedAsyncioTestCase):
         matches = [k for k in cog.words if "te" in k]
         self.assertIn("test", matches)
 
-    async def test_fortune_create_progress_bar(self):
-        from cogs.fortune import Fortune
-        cog = Fortune(self.bot)
-        bar = cog.create_progress_bar(50)
-        self.assertIsInstance(bar, str)
-        self.assertIn("[", bar)
-        self.assertIn("]", bar)
-        self.assertIn("50%", bar)
+
 
     async def test_comedy_game_load_data(self):
         from cogs.comedy_game import Comedy

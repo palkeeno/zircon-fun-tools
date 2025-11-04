@@ -65,12 +65,7 @@ POSTER_CHANNEL_ID = int(os.getenv('POSTER_CHANNEL_ID', '0'))
 
 # 機能の設定
 FEATURES = {
-    "ramble_game": {
-        "enabled": False,
-        "settings": {
-            "round_duration": 30
-        }
-    },
+
     "birthday": {
         "enabled": False,
         "settings": {
@@ -86,12 +81,7 @@ FEATURES = {
             "fuzzy_search": True
         }
     },
-    "fortune": {
-        "enabled": False,
-        "settings": {
-            "cooldown": 3600
-        }
-    },
+
     "comedy_game": {
         "enabled": True,
         "settings": {
@@ -117,6 +107,10 @@ FEATURES = {
         "settings": {}
     },
     "lottery": {
+        "enabled": True, 
+        "settings": {}
+    },
+    "poster": {
         "enabled": True, 
         "settings": {}
     }

@@ -104,9 +104,14 @@ class Poster(commands.Cog):
             draw.text((x, y), info['lines'][i:i+1], tuple(self.const["font_colors"]["white"]), font=self.fontD, stroke_width=3, stroke_fill=color3)
         return card
 
-    @app_commands.command(name="poster", description="キャラクターポスターを作成します")
-    @app_commands.describe(number="キャラクターの番号を入力してください")
-    async def poster_command(self, interaction: discord.Interaction, number: str):
+    @app_commands.command(
+        name="poster", 
+        description="キャラクターポスターを作成します"
+    )
+    @app_commands.describe(
+        number="キャラクターの番号を入力してください"
+    )
+    async def poster(self, interaction: discord.Interaction, number: str):
         await interaction.response.send_message(
             "キャラクターカード作成中です\nカードが完成するまでコマンドを入力しないようお願いします"
         )
@@ -197,10 +202,4 @@ class Poster(commands.Cog):
                     logger.error(f"Seleniumドライバの終了に失敗: {e}")
 
 async def setup(bot: commands.Bot):
-    try:
-        await bot.add_cog(Poster(bot))
-        logger.info("Poster cog loaded successfully")
-    except Exception as e:
-        logger.error(f"Failed to load Poster cog: {e}")
-        logger.error(traceback.format_exc())
-        raise
+    await bot.add_cog(Poster(bot))

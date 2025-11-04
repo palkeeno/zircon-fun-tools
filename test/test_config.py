@@ -45,7 +45,7 @@ class TestConfig(unittest.TestCase):
 
     def test_is_feature_enabled(self):
         import config
-        self.assertFalse(config.is_feature_enabled('ramble_game'))
+
         self.assertTrue(config.is_feature_enabled('comedy_game'))
         self.assertTrue(config.is_feature_enabled('janken'))
         self.assertFalse(config.is_feature_enabled('birthday'))
@@ -55,8 +55,7 @@ class TestConfig(unittest.TestCase):
 
     def test_get_feature_settings(self):
         import config
-        settings = config.get_feature_settings('ramble_game')
-        self.assertEqual(settings['round_duration'], 30)
+
         settings = config.get_feature_settings('birthday')
         self.assertEqual(settings['notification_time'], '09:00')
         self.assertEqual(settings['timezone'], 'Asia/Tokyo')
