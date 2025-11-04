@@ -4,7 +4,6 @@ Discordボットのコグ（機能拡張）モジュールを管理するパッ�
 
 from .birthday import Birthday
 from .dictionary import Dictionary
-from .comedy_game import ComedyGame
 from .janken import Janken
 from .oracle import Oracle
 from .admin import Admin
@@ -12,7 +11,6 @@ from .admin import Admin
 __all__ = [
     'Birthday',
     'Dictionary',
-    'ComedyGame',
     'Janken',
     'Oracle',
     'Admin'

@@ -46,7 +46,7 @@ class TestConfig(unittest.TestCase):
     def test_is_feature_enabled(self):
         import config
 
-        self.assertTrue(config.is_feature_enabled('comedy_game'))
+
         self.assertTrue(config.is_feature_enabled('janken'))
         self.assertFalse(config.is_feature_enabled('birthday'))
         self.assertFalse(config.is_feature_enabled('dictionary'))

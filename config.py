@@ -82,14 +82,7 @@ FEATURES = {
         }
     },
 
-    "comedy_game": {
-        "enabled": True,
-        "settings": {
-            "timeout": 300,
-            "min_players": 2,
-            "max_cards": 3
-        }
-    },
+
     "janken": {
         "enabled": True,
         "settings": {

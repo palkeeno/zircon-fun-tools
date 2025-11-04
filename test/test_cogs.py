@@ -45,12 +45,6 @@ class TestCogs(unittest.IsolatedAsyncioTestCase):
 
 
 
-    async def test_comedy_game_load_data(self):
-        from cogs.comedy_game import Comedy
-        cog = Comedy(self.bot)
-        # situations/cardsはファイル依存なので、属性の存在のみ確認
-        self.assertTrue(hasattr(cog, "situations"))
-        self.assertTrue(hasattr(cog, "cards"))
 
     async def test_janken_judge(self):
         from cogs.janken import Janken
