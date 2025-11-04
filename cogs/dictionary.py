@@ -100,10 +100,107 @@ class Dictionary(commands.Cog):
                 ephemeral=True
             )
 
-    @app_commands.command(name="search", description="単語を検索します")
-    @app_commands.describe(word="検索する単語")
-    async def search_word(self, interaction: discord.Interaction, word: str):
-        """単語を検索します"""
+    def _calculate_relevance_score(self, word: str, entry: tuple[str, str]) -> tuple[float, int]:
+        """
+        検索結果の関連性スコアを計算します。
+
+        Args:
+            word (str): 検索キーワード
+            entry (tuple): (見出し語, 説明文)のタプル
+
+        Returns:
+            tuple[float, int]: (スコア, キーワード出現回数)
+        """
+        title, description = entry
+        keyword_lower = word.lower()
+        title_lower = title.lower()
+        description_lower = description.lower()
+
+        # 見出し語完全一致は最高優先度
+        if title_lower == keyword_lower:
+            return (100.0, title.count(word) + description.count(word))
+
+        # 見出し語に含まれる場合は次に高い優先度
+        if keyword_lower in title_lower:
+            return (80.0, title.count(word) + description.count(word))
+
+        # 説明文に含まれる場合
+        if keyword_lower in description_lower:
+            return (60.0, description.count(word))
+
+        # あいまい検索の場合（見出し語のみ）
+        title_similarity = max((i for i in range(len(keyword_lower) + 1) 
+                              if keyword_lower[:i] in title_lower), default=0)
+        return (float(title_similarity) / len(keyword_lower) * 40.0, 0)
+
+    class DictionaryPaginator(discord.ui.View):
+        def __init__(self, search_results: list, items_per_page: int = 5, timeout: float = 180):
+            super().__init__(timeout=timeout)
+            self.search_results = search_results
+            self.items_per_page = items_per_page
+            self.current_page = 0
+            self.total_pages = (len(search_results) + items_per_page - 1) // items_per_page
+            self.update_button_states()
+
+        def update_button_states(self):
+            """ページに応じてボタンの有効/無効を設定"""
+            self.prev_page.disabled = self.current_page <= 0
+            self.next_page.disabled = self.current_page >= self.total_pages - 1
+
+        def get_current_page_embed(self, word: str) -> discord.Embed:
+            """現在のページのembedを生成"""
+            start_idx = self.current_page * self.items_per_page
+            end_idx = start_idx + self.items_per_page
+            current_items = self.search_results[start_idx:end_idx]
+
+            embed = discord.Embed(
+                title=f"🔍 「{word}」の検索結果",
+                description=f"全{len(self.search_results)}件中 {start_idx + 1}～{min(end_idx, len(self.search_results))}件目を表示",
+                color=discord.Color.blue()
+            )
+
+            for title, description, score, count in current_items:
+                embed.add_field(
+                    name=f"📚 {title}",
+                    value=description[:200] + ("..." if len(description) > 200 else ""),
+                    inline=False
+                )
+
+            if self.total_pages > 1:
+                embed.set_footer(text=f"ページ {self.current_page + 1}/{self.total_pages}")
+
+            return embed
+
+        @discord.ui.button(label="前へ", style=discord.ButtonStyle.primary, emoji="◀️")
+        async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+            self.current_page = max(0, self.current_page - 1)
+            self.update_button_states()
+            await interaction.response.edit_message(
+                embed=self.get_current_page_embed(interaction.message.embeds[0].title.split("「")[1].split("」")[0]),
+                view=self
+            )
+
+        @discord.ui.button(label="次へ", style=discord.ButtonStyle.primary, emoji="▶️")
+        async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+            self.current_page = min(self.total_pages - 1, self.current_page + 1)
+            self.update_button_states()
+            await interaction.response.edit_message(
+                embed=self.get_current_page_embed(interaction.message.embeds[0].title.split("「")[1].split("」")[0]),
+                view=self
+            )
+
+    @app_commands.command(name="search", description="辞書から情報を検索します")
+    @app_commands.describe(
+        word="検索するキーワード",
+        fuzzy="あいまい検索を行うかどうか（デフォルト: True）"
+    )
+    async def search_word(
+        self,
+        interaction: discord.Interaction,
+        word: str,
+        fuzzy: bool = True
+    ):
+        """辞書から情報を検索します"""
         if not config.is_feature_enabled('dictionary'):
             await interaction.response.send_message(
                 "このコマンドは現在無効化されています。",
@@ -116,31 +213,40 @@ class Dictionary(commands.Cog):
             return
 
         try:
-            if word in self.dictionary:
-                embed = discord.Embed(
-                    title=f"🔍 {word}",
-                    description=self.dictionary[word],
-                    color=discord.Color.blue()
+            # 検索結果を収集
+            search_results = []
+            for title, description in self.dictionary.items():
+                # 完全一致または部分一致
+                if (word.lower() in title.lower() or
+                    word.lower() in description.lower()):
+                    score, count = self._calculate_relevance_score((title, description))
+                    search_results.append((title, description, score, count))
+                # あいまい検索が有効な場合
+                elif fuzzy:
+                    score, count = self._calculate_relevance_score((title, description))
+                    if score > 0:
+                        search_results.append((title, description, score, count))
+
+            # 検索結果がない場合
+            if not search_results:
+                await interaction.response.send_message(
+                    f"「{word}」に関する情報は見つかりませんでした。",
+                    ephemeral=True
                 )
-                await interaction.response.send_message(embed=embed)
-            else:
-                # あいまい検索
-                matches = get_close_matches(word, self.dictionary.keys(), n=3, cutoff=0.6)
-                if matches:
-                    embed = discord.Embed(
-                        title="🔍 検索結果",
-                        description=f"「{word}」に近い単語が見つかりました：",
-                        color=discord.Color.orange()
-                    )
-                    for match in matches:
-                        embed.add_field(
-                            name=match,
-                            value=self.dictionary[match],
-                            inline=False
-                        )
-                    await interaction.response.send_message(embed=embed)
-                else:
-                    await interaction.response.send_message(f"「{word}」に一致する単語が見つかりませんでした。")
+                return
+
+            # スコアと出現回数で並び替え
+            search_results.sort(key=lambda x: (-x[2], -x[3]))
+
+            # ページネーターを作成
+            view = self.DictionaryPaginator(search_results)
+            
+            # 最初のページを表示
+            await interaction.response.send_message(
+                embed=view.get_current_page_embed(word),
+                view=view
+            )
+
         except Exception as e:
             logger.error(f"Error in search_word: {e}")
             logger.error(traceback.format_exc())
