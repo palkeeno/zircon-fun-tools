@@ -159,23 +159,23 @@ def get_birthday_channel_id() -> int:
     return BIRTHDAY_CHANNEL_ID
 
 
-def get_google_credentials():
-    """Google Sheets API 用の認証情報を取得します。"""
-    try:
-        from google.oauth2.service_account import Credentials  # type: ignore[import]
-    except ImportError as exc:
-        raise ImportError("google-auth がインストールされていません。requirements.txt を確認してください。") from exc
+# def get_google_credentials():
+#     """Google Sheets API 用の認証情報を取得します。"""
+#     try:
+#         from google.oauth2.service_account import Credentials  # type: ignore[import]
+#     except ImportError as exc:
+#         raise ImportError("google-auth がインストールされていません。requirements.txt を確認してください。") from exc
 
-    if GOOGLE_SERVICE_ACCOUNT_JSON:
-        try:
-            info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
-        except json.JSONDecodeError as exc:
-            raise ValueError("GOOGLE_SERVICE_ACCOUNT_JSON が正しいJSONではありません") from exc
-        return Credentials.from_service_account_info(info, scopes=GOOGLE_SHEETS_SCOPES)
+#     if GOOGLE_SERVICE_ACCOUNT_JSON:
+#         try:
+#             info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+#         except json.JSONDecodeError as exc:
+#             raise ValueError("GOOGLE_SERVICE_ACCOUNT_JSON が正しいJSONではありません") from exc
+#         return Credentials.from_service_account_info(info, scopes=GOOGLE_SHEETS_SCOPES)
 
-    if GOOGLE_SERVICE_ACCOUNT_FILE:
-        if not os.path.exists(GOOGLE_SERVICE_ACCOUNT_FILE):
-            raise FileNotFoundError(f"サービスアカウントファイルが見つかりません: {GOOGLE_SERVICE_ACCOUNT_FILE}")
-        return Credentials.from_service_account_file(GOOGLE_SERVICE_ACCOUNT_FILE, scopes=GOOGLE_SHEETS_SCOPES)
+#     if GOOGLE_SERVICE_ACCOUNT_FILE:
+#         if not os.path.exists(GOOGLE_SERVICE_ACCOUNT_FILE):
+#             raise FileNotFoundError(f"サービスアカウントファイルが見つかりません: {GOOGLE_SERVICE_ACCOUNT_FILE}")
+#         return Credentials.from_service_account_file(GOOGLE_SERVICE_ACCOUNT_FILE, scopes=GOOGLE_SHEETS_SCOPES)
 
-    raise ValueError("Google Sheets APIの認証情報が設定されていません。環境変数を確認してください。")
+#     raise ValueError("Google Sheets APIの認証情報が設定されていません。環境変数を確認してください。")
