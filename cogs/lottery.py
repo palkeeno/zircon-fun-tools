@@ -26,7 +26,6 @@ from discord.ext import commands
 import config
 
 logger = logging.getLogger(__name__)
-from utils import make_big_text
 
 
 class Lottery(commands.Cog):
@@ -100,8 +99,6 @@ class Lottery(commands.Cog):
 
         already_winners: List[discord.Member] = []
 
-        # make_big_text is moved to cogs.utils and imported at module top
-
         # 少し待って盛り上げ
         await asyncio.sleep(1.5)
 
@@ -120,20 +117,16 @@ class Lottery(commands.Cog):
             await send_target(header)
 
             # カウントダウン（編集で見せるのがスマートだが、単純送信でもOK）
-            countdown_msg = await send_target("カウントダウン... 3")
+            await send_target("カウントダウン... 3")
+            await asyncio.sleep(1)
             for sec in range(2, 0, -1):
-                try:
-                    await countdown_msg.edit(content=f"カウントダウン... {sec}")
-                except Exception:
-                    # 編集できなければ新規送信
-                    countdown_msg = await send_target(f"…{sec}…")
+                await send_target(f"カウントダウン... {sec}")
                 await asyncio.sleep(1)
 
             # 当選発表（Embed）
-            big_name = make_big_text(winner.display_name)
             embed = discord.Embed(
                 title=f"🎊 当選者発表 — {i}人目 🎊",
-                description=f"✨ **{big_name}** さん、当選です！\n{winner.mention}",
+                description=f"✨ **{winner.display_name}** さん、当選です！\n{winner.mention}",
                 color=discord.Color.gold(),
             )
             embed.set_thumbnail(url=winner.display_avatar.url if hasattr(winner, 'display_avatar') else discord.Embed.Empty)
@@ -145,7 +138,7 @@ class Lottery(commands.Cog):
         # 最終当選者一覧を表示
         if already_winners:
             # 当選者をメンションして見やすく表示
-            desc_lines = [f"{idx+1}. {m.mention} — {m.display_name}" for idx, m in enumerate(already_winners)]
+            desc_lines = [f"{idx+1}. {m.mention}" for idx, m in enumerate(already_winners)]
             final_embed = discord.Embed(title="🏆 抽選結果一覧", description="\n".join(desc_lines), color=discord.Color.green())
             await send_target(embed=final_embed)
         else:
