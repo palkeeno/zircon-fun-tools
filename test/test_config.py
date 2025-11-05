@@ -45,7 +45,6 @@ class TestConfig(unittest.TestCase):
         import config
 
         self.assertTrue(config.is_feature_enabled('birthday'))
-        # self.assertTrue(config.is_feature_enabled('dictionary'))
         self.assertTrue(config.is_feature_enabled('oracle'))
         self.assertFalse(config.is_feature_enabled('nonexistent_feature'))
 
