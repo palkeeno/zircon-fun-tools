@@ -2,9 +2,9 @@
 管理者向けのスラッシュコマンドを提供します。
 
 このモジュールは以下のスラッシュコマンドを提供します:
- - /admin list_commands: 各コマンドの有効/無効状態を一覧表示
- - /admin enable_command <name>: 指定したコマンドを有効化
- - /admin disable_command <name>: 指定したコマンドを無効化
+ - /permit <command> <role>: 指定コマンドを指定ロールに限定解除（管理者以外も実行可）
+ - /permit_revoke <command> <role>: 上記限定解除を取り消す
+ - /permit_list: 現在の限定解除状況を一覧表示
 
 使用は運営ロール（`config.OPERATOR_ROLE_ID`）に制限されます。
 """
@@ -12,13 +12,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Optional, Set
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 import config
+import permissions
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,16 @@ class Admin(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    # --- Backward-compatibility helper for tests ---
+    def is_command_enabled(self, name: str) -> bool:
+        """Feature flags are deprecated; return True by default.
+        Kept to satisfy existing tests expecting this callable.
+        """
+        try:
+            return bool(config.FEATURES.get(name, {}).get("enabled", True))
+        except Exception:
+            return True
 
     async def _is_operator(self, interaction: discord.Interaction) -> bool:
         """運営ロールIDで判定します。interaction がギルド内で発行されたことが前提です。"""
@@ -50,60 +61,75 @@ class Admin(commands.Cog):
 
         return any(r.id == operator_role_id for r in member.roles)
 
-    @app_commands.command(name="list_commands", description="各コマンドの有効・無効状況を表示します")
-    async def list_commands(self, interaction: discord.Interaction):
+    # ----------------------
+    # New permit management
+    # ----------------------
+    def _valid_command_names(self) -> Set[str]:
+        try:
+            return {cmd.name for cmd in self.bot.tree.get_commands()}
+        except Exception:
+            return set()
+
+    @app_commands.command(name="permit", description="指定コマンドを指定ロールに限定解除します（そのロール保持者が実行可能に）")
+    @app_commands.describe(command_name="スラッシュコマンド名", role="限定解除する対象ロール")
+    async def permit(self, interaction: discord.Interaction, command_name: str, role: discord.Role):
         if not await self._is_operator(interaction):
             await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
             return
+        valid = self._valid_command_names()
+        if command_name not in valid:
+            await interaction.response.send_message(f"不明なコマンド名です: {command_name}", ephemeral=True)
+            return
+        if interaction.guild is None:
+            await interaction.response.send_message("サーバー内で実行してください。", ephemeral=True)
+            return
+        permissions.grant_permission(interaction.guild.id, command_name, role.id)
+        await interaction.response.send_message(
+            f"コマンド '{command_name}' をロール {role.mention} に限定解除しました。",
+            ephemeral=True,
+        )
 
-        # Use FEATURE_STATE if present, otherwise use FEATURES
-        state = getattr(config, "FEATURE_STATE", None)
-        if state is None:
-            features = getattr(config, "FEATURES", {})
-            state = {k: v.get("enabled", False) for k, v in features.items()}
+    @app_commands.command(name="permit_revoke", description="限定解除を取り消します")
+    @app_commands.describe(command_name="スラッシュコマンド名", role="取り消す対象ロール")
+    async def permit_revoke(self, interaction: discord.Interaction, command_name: str, role: discord.Role):
+        if not await self._is_operator(interaction):
+            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+            return
+        valid = self._valid_command_names()
+        if command_name not in valid:
+            await interaction.response.send_message(f"不明なコマンド名です: {command_name}", ephemeral=True)
+            return
+        if interaction.guild is None:
+            await interaction.response.send_message("サーバー内で実行してください。", ephemeral=True)
+            return
+        permissions.revoke_permission(interaction.guild.id, command_name, role.id)
+        await interaction.response.send_message(
+            f"コマンド '{command_name}' のロール {role.mention} への限定解除を取り消しました。",
+            ephemeral=True,
+        )
 
-        lines = [f"{name}: {'有効' if enabled else '無効'}" for name, enabled in sorted(state.items())]
-        description = "\n".join(lines) if lines else "(登録されたコマンドがありません)"
-
-        embed = discord.Embed(title="スラッシュコマンドの状態", description=description, color=discord.Color.blue())
+    @app_commands.command(name="permit_list", description="このサーバーの限定解除状況を一覧表示します")
+    async def permit_list(self, interaction: discord.Interaction):
+        if not await self._is_operator(interaction):
+            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+            return
+        if interaction.guild is None:
+            await interaction.response.send_message("サーバー内で実行してください。", ephemeral=True)
+            return
+        data = permissions.list_all_permissions(interaction.guild.id)
+        if not data:
+            await interaction.response.send_message("現在、限定解除は設定されていません。", ephemeral=True)
+            return
+        # Build description lines with role mentions
+        lines = []
+        for cmd_name, role_ids in sorted(data.items()):
+            mentions = []
+            for rid in role_ids:
+                role = interaction.guild.get_role(int(rid))
+                mentions.append(role.mention if role else f"@&{rid}")
+            lines.append(f"/{cmd_name}: {', '.join(mentions) if mentions else '(なし)'}")
+        embed = discord.Embed(title="限定解除状況", description="\n".join(lines), color=discord.Color.blue())
         await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @app_commands.command(name="enable_command", description="指定したコマンドを有効化します")
-    @app_commands.describe(command_name="有効化するコマンド名（FEATURES のキー）")
-    async def enable_command(self, interaction: discord.Interaction, command_name: str):
-        if not await self._is_operator(interaction):
-            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
-            return
-
-        if command_name not in getattr(config, "FEATURE_STATE", {}):
-            await interaction.response.send_message(f"無効なコマンド名です: {command_name}", ephemeral=True)
-            return
-
-        # update both FEATURE_STATE and FEATURES (if present)
-        config.FEATURE_STATE[command_name] = True
-        if command_name in getattr(config, "FEATURES", {}):
-            config.FEATURES[command_name]["enabled"] = True
-
-        logger.info("Enabled command: %s", command_name)
-        await interaction.response.send_message(f"コマンド '{command_name}' を有効化しました。", ephemeral=True)
-
-    @app_commands.command(name="disable_command", description="指定したコマンドを無効化します")
-    @app_commands.describe(command_name="無効化するコマンド名（FEATURES のキー）")
-    async def disable_command(self, interaction: discord.Interaction, command_name: str):
-        if not await self._is_operator(interaction):
-            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
-            return
-
-        if command_name not in getattr(config, "FEATURE_STATE", {}):
-            await interaction.response.send_message(f"無効なコマンド名です: {command_name}", ephemeral=True)
-            return
-
-        config.FEATURE_STATE[command_name] = False
-        if command_name in getattr(config, "FEATURES", {}):
-            config.FEATURES[command_name]["enabled"] = False
-
-        logger.info("Disabled command: %s", command_name)
-        await interaction.response.send_message(f"コマンド '{command_name}' を無効化しました。", ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

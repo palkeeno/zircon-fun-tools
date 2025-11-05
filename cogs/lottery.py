@@ -24,6 +24,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import config
+import permissions
 
 logger = logging.getLogger(__name__)
 
@@ -35,20 +36,15 @@ class Lottery(commands.Cog):
         self.bot = bot
 
     async def _is_operator(self, interaction: discord.Interaction) -> bool:
-        operator_role_id = getattr(config, "OPERATOR_ROLE_ID", 0)
-        if not operator_role_id:
-            return False
-
-        member: Optional[discord.Member] = None
+        # kept for backward compatibility where referenced; delegate to permissions helper
+        member: Optional[discord.Member]
         if isinstance(interaction.user, discord.Member):
             member = interaction.user
         elif interaction.guild is not None:
             member = interaction.guild.get_member(interaction.user.id)
-
-        if not member:
-            return False
-
-        return any(r.id == operator_role_id for r in member.roles)
+        else:
+            member = None
+        return permissions.is_operator_member(member)
 
     @app_commands.command(name="lottery", description="指定ロールから人数分を抽選して順に発表します")
     @app_commands.describe(
@@ -61,13 +57,11 @@ class Lottery(commands.Cog):
         role: discord.Role,
         count: int,
     ):
-        # 初期バリデーション
-        if not await self._is_operator(interaction):
-            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
-            return
-
-        if not config.is_feature_enabled('lottery'):
-            await interaction.response.send_message("現在抽選機能は無効化されています。", ephemeral=True)
+        # 権限: 管理者は常にOK、非管理者は限定解除されたロールのみ
+        if not permissions.can_run_command(interaction, 'lottery'):
+            await interaction.response.send_message(
+                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
+                ephemeral=True)
             return
 
         if count < 1:

@@ -10,6 +10,7 @@ import random
 import logging
 import traceback
 import config
+import permissions
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
@@ -39,10 +40,10 @@ class Oracle(commands.Cog):
             choices (int): 選択肢の数
         """
         try:
-            # 機能が有効かどうかを確認
-            if not config.is_feature_enabled('oracle'):
+            # 権限チェック: 管理者は常にOK、非管理者は限定解除されたロールのみ
+            if not permissions.can_run_command(interaction, 'oracle'):
                 await interaction.response.send_message(
-                    "申し訳ありません。現在、選択肢アドバイス機能は無効になっています。",
+                    "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
                     ephemeral=True
                 )
                 return

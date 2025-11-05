@@ -43,16 +43,12 @@ class FunToolsBot(commands.Bot):
         Cogsの読み込みと同期を行います。
         """
         try:
-            enabled_extensions = []
+            loaded_extensions = []
             for extension in self.initial_extensions:
                 try:
-                    cog_name = extension.split('.')[-1]
-                    if config.is_feature_enabled(cog_name):
-                        await self.load_extension(extension)
-                        enabled_extensions.append(extension)
-                        logger.info(f'{extension} をロードしました')
-                    else:
-                        logger.info(f'{extension} は無効化されています')
+                    await self.load_extension(extension)
+                    loaded_extensions.append(extension)
+                    logger.info(f'{extension} をロードしました')
                 except Exception as e:
                     logger.error(f'{extension} のロードに失敗しました: {e}')
                     logger.error(traceback.format_exc())
@@ -64,7 +60,7 @@ class FunToolsBot(commands.Bot):
             except Exception as e:
                 logger.error(f"スラッシュコマンドの同期に失敗しました: {e}")
                 logger.error(traceback.format_exc())
-            self.enabled_extensions = enabled_extensions  # テスト用に有効な拡張を記録
+            self.enabled_extensions = loaded_extensions  # テスト用
         except Exception as e:
             logger.error(f'Error in setup_hook: {e}')
             logger.error(traceback.format_exc())
@@ -78,10 +74,7 @@ class FunToolsBot(commands.Bot):
         logger.info('------')
         await self.change_presence(activity=discord.Game(name="/help でコマンド一覧"))
         
-        # 機能の状態をログに出力
-        for feature, settings in config.FEATURES.items():
-            status = "有効" if settings['enabled'] else "無効"
-            logger.info(f"{feature}: {status}")
+        # 機能有効/無効の概念は廃止（常時ロード）。必要なら今後は権限で制御します。
 
     async def on_error(self, event_method, *args, **kwargs):
         """

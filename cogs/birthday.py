@@ -12,6 +12,7 @@ import traceback
 import datetime
 import os
 import config
+import permissions
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
@@ -36,8 +37,8 @@ class Birthday(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        """ボットの準備が完了したときに誕生日タスクを開始します"""
-        if not self.birthday_task_started and config.is_feature_enabled('birthday'):
+        """ボットの準備が完了したときに誕生日タスクを開始します（常時）。"""
+        if not self.birthday_task_started:
             self.birthday_task.start()
             self.birthday_task_started = True
 
@@ -112,9 +113,10 @@ class Birthday(commands.Cog):
             interaction (discord.Interaction): インタラクション
             name (str): 削除したい名前
         """
-        if not config.is_feature_enabled('birthday'):
+        # 権限チェック
+        if not permissions.can_run_command(interaction, 'removebirthday'):
             await interaction.response.send_message(
-                "このコマンドは現在無効化されています。",
+                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
                 ephemeral=True
             )
             return
@@ -188,9 +190,10 @@ class Birthday(commands.Cog):
             month (int): 月
             day (int): 日
         """
-        if not config.is_feature_enabled('birthday'):
+        # 権限チェック
+        if not permissions.can_run_command(interaction, 'addbirthday'):
             await interaction.response.send_message(
-                "このコマンドは現在無効化されています。",
+                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
                 ephemeral=True
             )
             return
@@ -238,9 +241,10 @@ class Birthday(commands.Cog):
             interaction (discord.Interaction): インタラクション
             name (str, optional): 名前で絞り込み
         """
-        if not config.is_feature_enabled('birthdays'):
+        # 権限チェック
+        if not permissions.can_run_command(interaction, 'birthdays'):
             await interaction.response.send_message(
-                "このコマンドは現在無効化されています。",
+                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
                 ephemeral=True
             )
             return

@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 import logging
 import traceback
 import config
+import permissions
 import json
 import os
 import io
@@ -22,7 +23,6 @@ class Poster(commands.Cog):
     /posterコマンドでキャラクターポスターを生成します。
     """
     def __init__(self, bot: commands.Bot):
-        self.bot = bot
         # config.pyからパス・フォント・チャンネルIDを取得
         self.fontA = ImageFont.truetype(config.POSTER_FONT_A, 30)
         self.fontB = ImageFont.truetype(config.POSTER_FONT_B, 40)
@@ -112,6 +112,13 @@ class Poster(commands.Cog):
         number="キャラクターの番号を入力してください"
     )
     async def poster(self, interaction: discord.Interaction, number: str):
+        # 権限チェック
+        if not permissions.can_run_command(interaction, 'poster'):
+            await interaction.response.send_message(
+                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
+                ephemeral=True
+            )
+            return
         await interaction.response.send_message(
             "キャラクターカード作成中です\nカードが完成するまでコマンドを入力しないようお願いします"
         )
