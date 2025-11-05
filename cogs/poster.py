@@ -24,9 +24,11 @@ class Poster(commands.Cog):
     """
     def __init__(self, bot: commands.Bot):
         # config.pyからパス・フォント・チャンネルIDを取得
-        self.fontA = ImageFont.truetype(config.POSTER_FONT_A, 30)
-        self.fontB = ImageFont.truetype(config.POSTER_FONT_B, 40)
-        self.fontC = ImageFont.truetype(config.POSTER_FONT_C, 35)
+        # フォントは環境により存在しない可能性があるためフォールバックを用意
+        self.fontA = self._try_load_font(config.POSTER_FONT_A, 30)
+        self.fontB = self._try_load_font(config.POSTER_FONT_B, 40)
+        self.fontC = self._try_load_font(config.POSTER_FONT_C, 35)
+        self.fontD = self._try_load_font(config.POSTER_FONT_D, 115)
         self.fontD = ImageFont.truetype(config.POSTER_FONT_D, 115)
         self.card_path = config.POSTER_CARD_PATH
         self.mask_path = config.POSTER_MASK_PATH
@@ -40,6 +42,50 @@ class Poster(commands.Cog):
         const_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'poster_const.json')
         with open(const_path, encoding='utf-8') as f:
             self.const = json.load(f)
+    def _try_load_font(self, prefer_path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+        """フォントを安全に読み込む。存在しない場合はWindows既定フォントやPIL既定にフォールバック。
+
+        優先順:
+        1) config で指定されたパス（相対の場合はリポジトリルートや data/fonts も探索）
+        2) Windows の一般的な日本語フォント（Meiryo/MS Gothic/Yu Gothic）
+        3) PIL のデフォルトフォント
+        """
+        candidates = []
+        # まず指定パス
+        if prefer_path:
+            # 絶対/相対問わず候補に入れる
+            candidates.append(prefer_path)
+            # 相対ならリポジトリルート・data/fonts も試す
+            if not os.path.isabs(prefer_path):
+                repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+                candidates.append(os.path.join(repo_root, prefer_path))
+                candidates.append(os.path.join(repo_root, 'data', 'fonts', prefer_path))
+
+        # Windows の代表的な日本語フォントパス
+        win_fonts = [
+            r"C:\\Windows\\Fonts\\meiryo.ttc",
+            r"C:\\Windows\\Fonts\\MEIRYO.TTC",
+            r"C:\\Windows\\Fonts\\msgothic.ttc",
+            r"C:\\Windows\\Fonts\\MSGOTHIC.TTC",
+            r"C:\\Windows\\Fonts\\YuGothM.ttc",
+            r"C:\\Windows\\Fonts\\YuGothB.ttc",
+        ]
+        candidates.extend(win_fonts)
+
+        for path in candidates:
+            try:
+                if os.path.exists(path):
+                    return ImageFont.truetype(path, size)
+            except Exception:
+                # 読み込み失敗時は次の候補へ
+                continue
+
+        logger.warning("フォントを読み込めませんでした。PILのデフォルトフォントを使用します。候補: %s", candidates)
+        try:
+            return ImageFont.load_default()
+        except Exception:
+            # ここまで来ることは稀だが、安全のため更に例外ガード
+            return ImageFont.load_default()
 
     def _draw_poster(self, char, card, mask, peaceful, brave, glory, freedom, info):
         """
