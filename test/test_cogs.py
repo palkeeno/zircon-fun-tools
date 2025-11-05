@@ -33,20 +33,6 @@ class TestCogs(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cog.birthdays["123"]["month"], 1)
         self.assertEqual(cog.birthdays["123"]["day"], 2)
 
-    async def test_dictionary_add_and_search(self):
-        from cogs.dictionary import Dictionary
-        cog = Dictionary(self.bot)
-        # 内部辞書に直接追加
-        cog.words = {"test": "テスト"}
-        self.assertEqual(cog.words["test"], "テスト")
-        # 検索ロジック
-        matches = [k for k in cog.words if "te" in k]
-        self.assertIn("test", matches)
-
-
-
-
-
     async def test_oracle_init(self):
         from cogs.oracle import Oracle
         cog = Oracle(self.bot)

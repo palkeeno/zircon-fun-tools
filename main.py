@@ -31,7 +31,7 @@ class FunToolsBot(commands.Bot):
         super().__init__(command_prefix=commands.when_mentioned_or('!'), intents=intents)
         self.initial_extensions = [
             'cogs.birthday',
-            'cogs.dictionary',
+            # 'cogs.dictionary',
             'cogs.oracle',
             'cogs.admin',
             'cogs.lottery',

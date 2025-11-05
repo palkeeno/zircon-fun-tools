@@ -1,353 +1,376 @@
-"""
-辞書機能のコグ
-このモジュールは、カスタム辞書の機能を提供します。
-"""
+# """
+# Googleスプレッドシートをデータソースとする辞書コグ。
 
-import discord
-from discord import app_commands
-from discord.ext import commands
-import json
-import logging
-import traceback
-import os
-import config
+# スプレッドシート全体からキーワード検索を行い、シート名や行番号とともに
+# 結果をEmbedで表示します。スプレッドシートの更新は外部で行い、ボット側では
+# Google Sheets API経由で読み取り専用アクセスを行います。
+# """
 
-# ロギングの設定
-logger = logging.getLogger(__name__)
+# from __future__ import annotations
 
-class Dictionary(commands.Cog):
-    """
-    辞書機能のコグ
-    カスタム辞書の機能を提供します。
-    """
-    
-    def __init__(self, bot: commands.Bot):
-        """
-        辞書機能のコグを初期化します。
-        
-        Args:
-            bot (commands.Bot): ボットのインスタンス
-        """
-        self.bot = bot
-        self.dictionary_file = os.path.join("data", "dictionary.json")
-        self.dictionary = self.load_dictionary()
+# import time
+# from typing import Any, Dict, List, Sequence, Tuple
 
-    def load_dictionary(self):
-        """辞書データを読み込む"""
-        try:
-            if not config.is_feature_enabled('dictionary'):
-                return {}
-            
-            if not os.path.exists(self.dictionary_file):
-                os.makedirs(os.path.dirname(self.dictionary_file), exist_ok=True)
-                with open(self.dictionary_file, 'w', encoding='utf-8') as f:
-                    json.dump({}, f, ensure_ascii=False, indent=4)
-                return {}
-            
-            with open(self.dictionary_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading dictionary: {e}")
-            logger.error(traceback.format_exc())
-            return {}
+# import discord
+# from discord import app_commands
+# from discord.ext import commands
+# import logging
+# import traceback
 
-    def save_dictionary(self):
-        """辞書データを保存"""
-        try:
-            if not config.is_feature_enabled('dictionary'):
-                return
-            
-            with open(self.dictionary_file, 'w', encoding='utf-8') as f:
-                json.dump(self.dictionary, f, indent=4, ensure_ascii=False)
-        except Exception as e:
-            logger.error(f"Error saving dictionary: {e}")
-            logger.error(traceback.format_exc())
+# import config
 
-    async def _is_operator(self, interaction: discord.Interaction) -> bool:
-        """
-        運営ロールIDで判定します。
-        """
-        from config import OPERATOR_ROLE_ID
-        if not OPERATOR_ROLE_ID or not hasattr(interaction.user, "roles"):
-            return False
-        return any(role.id == OPERATOR_ROLE_ID for role in interaction.user.roles)
+# try:
+#     import gspread  # type: ignore
+# except ImportError:  # pragma: no cover - optional dependency
+#     gspread = None  # type: ignore
 
-    @app_commands.command(name="addword", description="新しい単語を辞書に追加します")
-    @app_commands.describe(word="追加する単語", meaning="単語の意味")
-    async def add_word(self, interaction: discord.Interaction, word: str, meaning: str):
-        """新しい単語を辞書に追加します"""
-        if not config.is_feature_enabled('dictionary'):
-            await interaction.response.send_message(
-                "このコマンドは現在無効化されています。",
-                ephemeral=True
-            )
-            return
+# logger = logging.getLogger(__name__)
 
-        if not await self._is_operator(interaction):
-            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
-            return
+# Entry = Dict[str, Any]
 
-        try:
-            self.dictionary[word] = meaning
-            self.save_dictionary()
-            await interaction.response.send_message(f"単語「{word}」を辞書に追加しました！")
-        except Exception as e:
-            logger.error(f"Error in add_word: {e}")
-            logger.error(traceback.format_exc())
-            await interaction.response.send_message(
-                "エラーが発生しました。もう一度お試しください。",
-                ephemeral=True
-            )
 
-    def _calculate_relevance_score(self, word: str, title: str, description: str) -> tuple[float, int]:
-        """
-        検索結果の関連性スコアを計算します。
+# class Dictionary(commands.Cog):
+#     """Googleスプレッドシートを参照する辞書機能コグ。"""
 
-        Args:
-            word (str): 検索キーワード
-            title (str): 見出し語
-            description (str): 説明文
+#     CACHE_TTL_SECONDS = 300
+#     MAX_LINES_PER_FIELD = 6
 
-        Returns:
-            tuple[float, int]: (スコア, キーワード出現回数)
-        """
-        keyword_lower = word.lower()
-        title_lower = title.lower()
-        description_lower = description.lower()
+#     def __init__(self, bot: commands.Bot):
+#         self.bot = bot
+#         self._entries: List[Entry] = []
+#         self._last_loaded: float = 0.0
+#         self._sheet_id: str | None = config.DICTIONARY_SHEET_ID
 
-        # 見出し語完全一致は最高優先度
-        if title_lower == keyword_lower:
-            return (100.0, title.count(word) + description.count(word))
+#     # ------------------------------------------------------------------
+#     # データ読み込み関連
+#     # ------------------------------------------------------------------
+#     def _ensure_loaded(self, force: bool = False) -> None:
+#         if not config.is_feature_enabled("dictionary"):
+#             self._entries = []
+#             return
 
-        # 見出し語に含まれる場合は次に高い優先度
-        if keyword_lower in title_lower:
-            return (80.0, title.count(word) + description.count(word))
+#         if not self._sheet_id:
+#             raise RuntimeError("DICTIONARY_SHEET_ID が設定されていません。環境変数を確認してください。")
 
-        # 説明文に含まれる場合
-        if keyword_lower in description_lower:
-            return (60.0, description.count(word))
+#         if not force and self._entries and (time.time() - self._last_loaded) < self.CACHE_TTL_SECONDS:
+#             return
 
-        # あいまい検索の場合（見出し語のみ）
-        if len(keyword_lower) > 0:
-            title_similarity = max((i for i in range(len(keyword_lower) + 1) 
-                                  if keyword_lower[:i] in title_lower), default=0)
-            return (float(title_similarity) / len(keyword_lower) * 40.0, 0)
-        
-        return (0.0, 0)
+#         if gspread is None:
+#             raise RuntimeError("gspread がインストールされていません。requirements.txt を確認してください。")
 
-    class DictionaryPaginator(discord.ui.View):
-        def __init__(self, search_results: list, items_per_page: int = 5, timeout: float = 180):
-            super().__init__(timeout=timeout)
-            self.search_results = search_results
-            self.items_per_page = items_per_page
-            self.current_page = 0
-            self.total_pages = (len(search_results) + items_per_page - 1) // items_per_page
-            self.update_button_states()
+#         logger.info("Google Sheets から辞書データを取得します")
+#         credentials = config.get_google_credentials()
+#         client = gspread.authorize(credentials)
 
-        def update_button_states(self):
-            """ページに応じてボタンの有効/無効を設定"""
-            self.prev_page.disabled = self.current_page <= 0
-            self.next_page.disabled = self.current_page >= self.total_pages - 1
+#         try:
+#             spreadsheet = client.open_by_key(self._sheet_id)
+#         except Exception as exc:  # pragma: no cover - ネットワーク依存
+#             logger.error("スプレッドシートを開けませんでした: %s", exc)
+#             raise
 
-        def get_current_page_embed(self, word: str) -> discord.Embed:
-            """現在のページのembedを生成"""
-            start_idx = self.current_page * self.items_per_page
-            end_idx = start_idx + self.items_per_page
-            current_items = self.search_results[start_idx:end_idx]
+#         entries: List[Entry] = []
+#         for worksheet in spreadsheet.worksheets():
+#             try:
+#                 values = worksheet.get_all_values()
+#             except Exception as exc:  # pragma: no cover - ネットワーク依存
+#                 logger.error("シート '%s' の取得に失敗しました: %s", worksheet.title, exc)
+#                 continue
 
-            embed = discord.Embed(
-                title=f"🔍 「{word}」の検索結果",
-                description=f"全{len(self.search_results)}件中 {start_idx + 1}～{min(end_idx, len(self.search_results))}件目を表示",
-                color=discord.Color.blue()
-            )
+#             if not values:
+#                 continue
 
-            for title, description, score, count in current_items:
-                embed.add_field(
-                    name=f"📚 {title}",
-                    value=description[:200] + ("..." if len(description) > 200 else ""),
-                    inline=False
-                )
+#             headers = self._normalise_headers(values[0])
+#             for row_index, row in enumerate(values[1:], start=2):
+#                 entry = self._build_entry(worksheet, headers, row_index, row)
+#                 if entry:
+#                     entries.append(entry)
 
-            if self.total_pages > 1:
-                embed.set_footer(text=f"ページ {self.current_page + 1}/{self.total_pages}")
+#         self._entries = entries
+#         self._last_loaded = time.time()
+#         logger.info("辞書データを %d 件ロードしました", len(entries))
 
-            return embed
+#     @staticmethod
+#     def _normalise_headers(header_row: Sequence[str]) -> List[str]:
+#         headers: List[str] = []
+#         for idx, value in enumerate(header_row):
+#             name = value.strip()
+#             if not name:
+#                 name = f"Column {idx + 1}"
+#             headers.append(name)
+#         return headers
 
-        @discord.ui.button(label="前へ", style=discord.ButtonStyle.primary, emoji="◀️")
-        async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-            self.current_page = max(0, self.current_page - 1)
-            self.update_button_states()
-            await interaction.response.edit_message(
-                embed=self.get_current_page_embed(interaction.message.embeds[0].title.split("「")[1].split("」")[0]),
-                view=self
-            )
+#     def _build_entry(
+#         self,
+#         worksheet: Any,
+#         headers: Sequence[str],
+#         row_index: int,
+#         row: Sequence[str],
+#     ) -> Entry | None:
+#         pairs: List[Tuple[str, str]] = []
+#         text_parts: List[str] = []
+#         summary: str | None = None
 
-        @discord.ui.button(label="次へ", style=discord.ButtonStyle.primary, emoji="▶️")
-        async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-            self.current_page = min(self.total_pages - 1, self.current_page + 1)
-            self.update_button_states()
-            await interaction.response.edit_message(
-                embed=self.get_current_page_embed(interaction.message.embeds[0].title.split("「")[1].split("」")[0]),
-                view=self
-            )
+#         for col_index, cell in enumerate(row):
+#             cell_value = cell.strip()
+#             if not cell_value:
+#                 continue
 
-    @app_commands.command(name="search", description="辞書から情報を検索します")
-    @app_commands.describe(
-        word="検索するキーワード",
-        fuzzy="あいまい検索を行うかどうか（デフォルト: True）"
-    )
-    async def search_word(
-        self,
-        interaction: discord.Interaction,
-        word: str,
-        fuzzy: bool = True
-    ):
-        """辞書から情報を検索します"""
-        if not config.is_feature_enabled('dictionary'):
-            await interaction.response.send_message(
-                "このコマンドは現在無効化されています。",
-                ephemeral=True
-            )
-            return
+#             header = headers[col_index] if col_index < len(headers) else f"Column {col_index + 1}"
+#             header = header.strip() or f"Column {col_index + 1}"
+#             pairs.append((header, cell_value))
+#             text_parts.append(f"{header}: {cell_value}")
 
-        if not await self._is_operator(interaction):
-            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
-            return
+#             if not summary:
+#                 summary = cell_value
 
-        try:
-            # 検索結果を収集
-            search_results = []
-            for title, description in self.dictionary.items():
-                # 完全一致または部分一致
-                if (word.lower() in title.lower() or
-                    word.lower() in description.lower()):
-                    score, count = self._calculate_relevance_score(word, title, description)
-                    search_results.append((title, description, score, count))
-                # あいまい検索が有効な場合
-                elif fuzzy:
-                    score, count = self._calculate_relevance_score(word, title, description)
-                    if score > 0:
-                        search_results.append((title, description, score, count))
+#         if not pairs:
+#             return None
 
-            # 検索結果がない場合
-            if not search_results:
-                await interaction.response.send_message(
-                    f"「{word}」に関する情報は見つかりませんでした。",
-                    ephemeral=True
-                )
-                return
+#         if not summary:
+#             summary = f"{worksheet.title} 行{row_index}"
 
-            # スコアと出現回数で並び替え
-            search_results.sort(key=lambda x: (-x[2], -x[3]))
+#         return {
+#             "sheet": worksheet.title,
+#             "gid": getattr(worksheet, "id", None),
+#             "row": row_index,
+#             "summary": summary,
+#             "pairs": pairs,
+#             "text": "\n".join(text_parts),
+#         }
 
-            # ページネーターを作成
-            view = self.DictionaryPaginator(search_results)
-            
-            # 最初のページを表示
-            await interaction.response.send_message(
-                embed=view.get_current_page_embed(word),
-                view=view
-            )
+#     @staticmethod
+#     def _count_keyword_occurrences(keyword_lower: str, text: str) -> int:
+#         return text.lower().count(keyword_lower) if keyword_lower else 0
 
-        except Exception as e:
-            logger.error(f"Error in search_word: {e}")
-            logger.error(traceback.format_exc())
-            await interaction.response.send_message(
-                "エラーが発生しました。もう一度お試しください。",
-                ephemeral=True
-            )
+#     def _calculate_relevance_score(self, keyword: str, entry: Entry, allow_fuzzy: bool) -> Tuple[float, int]:
+#         keyword_lower = keyword.lower()
+#         summary = entry["summary"]
+#         body_text = entry["text"]
+#         combined = f"{summary}\n{body_text}".lower()
+#         count = self._count_keyword_occurrences(keyword_lower, combined)
 
-    @app_commands.command(name="deleteword", description="単語を辞書から削除します")
-    @app_commands.describe(word="削除する単語")
-    async def delete_word(self, interaction: discord.Interaction, word: str):
-        """単語を辞書から削除します"""
-        if not config.is_feature_enabled('dictionary'):
-            await interaction.response.send_message(
-                "このコマンドは現在無効化されています。",
-                ephemeral=True
-            )
-            return
+#         if not keyword_lower:
+#             return (0.0, count)
 
-        if not await self._is_operator(interaction):
-            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
-            return
+#         summary_lower = summary.lower()
+#         body_lower = body_text.lower()
 
-        try:
-            if word in self.dictionary:
-                del self.dictionary[word]
-                self.save_dictionary()
-                await interaction.response.send_message(f"単語「{word}」を辞書から削除しました。")
-            else:
-                await interaction.response.send_message(f"「{word}」は辞書に存在しません。")
-        except Exception as e:
-            logger.error(f"Error in delete_word: {e}")
-            logger.error(traceback.format_exc())
-            await interaction.response.send_message(
-                "エラーが発生しました。もう一度お試しください。",
-                ephemeral=True
-            )
+#         if summary_lower == keyword_lower:
+#             return (100.0, count)
+#         if keyword_lower in summary_lower:
+#             return (80.0, count)
+#         if keyword_lower in body_lower:
+#             return (60.0, count)
 
-    @app_commands.command(name="listwords", description="辞書に登録されている単語の一覧を表示します")
-    async def list_words(self, interaction: discord.Interaction):
-        """辞書に登録されている単語の一覧を表示"""
-        if not config.is_feature_enabled('dictionary'):
-            await interaction.response.send_message(
-                "このコマンドは現在無効化されています。",
-                ephemeral=True
-            )
-            return
+#         if allow_fuzzy:
+#             longest = max(
+#                 (i for i in range(len(keyword_lower), 0, -1) if keyword_lower[:i] in summary_lower),
+#                 default=0,
+#             )
+#             if longest:
+#                 score = float(longest) / len(keyword_lower) * 40.0
+#                 return (score, count)
 
-        if not await self._is_operator(interaction):
-            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
-            return
+#         return (0.0, count)
 
-        try:
-            if not self.dictionary:
-                await interaction.response.send_message("辞書に登録されている単語はありません。")
-                return
+#     def _format_entry_lines(self, entry: Entry) -> str:
+#         lines: List[str] = []
+#         for header, value in entry["pairs"][: self.MAX_LINES_PER_FIELD]:
+#             truncated = value if len(value) <= 200 else value[:197] + "..."
+#             lines.append(f"**{header}**: {truncated}")
+#         if len(entry["pairs"]) > self.MAX_LINES_PER_FIELD:
+#             lines.append("…")
+#         return "\n".join(lines)
 
-            embed = discord.Embed(
-                title="📚 辞書一覧",
-                description="登録されている単語の一覧です",
-                color=discord.Color.green()
-            )
+#     # ------------------------------------------------------------------
+#     # Discord ユーティリティ
+#     # ------------------------------------------------------------------
+#     async def _is_operator(self, interaction: discord.Interaction) -> bool:
+#         operator_role_id = getattr(config, "OPERATOR_ROLE_ID", 0)
+#         if not operator_role_id:
+#             return False
 
-            # 単語を50音順にソート
-            sorted_words = sorted(self.dictionary.items(), key=lambda x: x[0])
-            
-            # 単語をグループ化して表示（1ページあたり10単語）
-            words_per_page = 10
-            total_pages = (len(sorted_words) + words_per_page - 1) // words_per_page
+#         user = interaction.user
+#         if isinstance(user, discord.Member):
+#             roles = user.roles
+#         elif interaction.guild:
+#             member = interaction.guild.get_member(user.id)
+#             roles = getattr(member, "roles", []) if member else []
+#         else:
+#             roles = []
 
-            for i in range(0, len(sorted_words), words_per_page):
-                page_words = sorted_words[i:i + words_per_page]
-                word_list = "\n".join(f"• {word}" for word, _ in page_words)
-                embed.add_field(
-                    name=f"ページ {i//words_per_page + 1}/{total_pages}",
-                    value=word_list,
-                    inline=False
-                )
+#         return any(role.id == operator_role_id for role in roles)
 
-            await interaction.response.send_message(embed=embed)
-        except Exception as e:
-            logger.error(f"Error in list_words: {e}")
-            logger.error(traceback.format_exc())
-            await interaction.response.send_message(
-                "エラーが発生しました。もう一度お試しください。",
-                ephemeral=True
-            )
+#     class DictionaryPaginator(discord.ui.View):
+#         def __init__(self, keyword: str, search_results: Sequence[Entry], items_per_page: int = 3, timeout: float = 180):
+#             super().__init__(timeout=timeout)
+#             self.keyword = keyword
+#             self.search_results = list(search_results)
+#             self.items_per_page = max(1, items_per_page)
+#             self.current_page = 0
+#             self.total_pages = max(1, (len(self.search_results) + self.items_per_page - 1) // self.items_per_page)
+#             self.update_button_states()
 
-async def setup(bot: commands.Bot):
-    """
-    コグをボットに追加します。
-    
-    Args:
-        bot (commands.Bot): ボットのインスタンス
-    """
-    try:
-        await bot.add_cog(Dictionary(bot))
-        logger.info("Dictionary cog loaded successfully")
-    except Exception as e:
-        logger.error(f"Failed to load Dictionary cog: {e}")
-        logger.error(traceback.format_exc())
-        raise
+#         def update_button_states(self) -> None:
+#             disabled = self.total_pages <= 1
+#             self.prev_page.disabled = disabled or self.current_page <= 0
+#             self.next_page.disabled = disabled or self.current_page >= self.total_pages - 1
+
+#         def _items_for_page(self, page: int) -> Sequence[Entry]:
+#             start_idx = page * self.items_per_page
+#             end_idx = start_idx + self.items_per_page
+#             return self.search_results[start_idx:end_idx]
+
+#         def get_current_page_embed(self) -> discord.Embed:
+#             start_idx = self.current_page * self.items_per_page
+#             end_idx = start_idx + self.items_per_page
+#             embed = discord.Embed(
+#                 title=f"🔍 「{self.keyword}」の検索結果",
+#                 description=f"全{len(self.search_results)}件中 {start_idx + 1}～{min(end_idx, len(self.search_results))}件を表示",
+#                 color=discord.Color.blue(),
+#             )
+
+#             for entry in self._items_for_page(self.current_page):
+#                 sheet = entry["sheet"]
+#                 row = entry["row"]
+#                 summary = entry["summary"]
+#                 field_name = f"📚 {summary}｜{sheet} 行{row}"
+#                 embed.add_field(name=field_name, value=entry["rendered"], inline=False)
+
+#             if self.total_pages > 1:
+#                 embed.set_footer(text=f"ページ {self.current_page + 1}/{self.total_pages}")
+
+#             return embed
+
+#         @discord.ui.button(label="前へ", style=discord.ButtonStyle.primary, emoji="◀️")
+#         async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+#             if self.current_page <= 0:
+#                 return
+#             self.current_page -= 1
+#             self.update_button_states()
+#             await interaction.response.edit_message(embed=self.get_current_page_embed(), view=self)
+
+#         @discord.ui.button(label="次へ", style=discord.ButtonStyle.primary, emoji="▶️")
+#         async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+#             if self.current_page >= self.total_pages - 1:
+#                 return
+#             self.current_page += 1
+#             self.update_button_states()
+#             await interaction.response.edit_message(embed=self.get_current_page_embed(), view=self)
+
+#     # ------------------------------------------------------------------
+#     # スラッシュコマンド
+#     # ------------------------------------------------------------------
+#     @app_commands.command(name="search", description="辞書スプレッドシートから情報を検索します")
+#     @app_commands.describe(
+#         word="検索するキーワード",
+#         fuzzy="あいまい検索を行うかどうか（デフォルト: True）",
+#     )
+#     async def search_word(self, interaction: discord.Interaction, word: str, fuzzy: bool = True) -> None:
+#         if not config.is_feature_enabled("dictionary"):
+#             await interaction.response.send_message("このコマンドは現在無効化されています。", ephemeral=True)
+#             return
+
+#         if not await self._is_operator(interaction):
+#             await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+#             return
+
+#         try:
+#             self._ensure_loaded()
+#         except Exception as exc:
+#             logger.error("辞書データのロードに失敗しました: %s", exc)
+#             await interaction.response.send_message("辞書データの読み込みに失敗しました。設定を確認してください。", ephemeral=True)
+#             return
+
+#         keyword = word.strip()
+#         results: List[Entry] = []
+#         for entry in self._entries:
+#             score, count = self._calculate_relevance_score(keyword, entry, fuzzy)
+#             if score <= 0:
+#                 continue
+#             enriched = dict(entry)
+#             enriched["score"] = score
+#             enriched["count"] = count
+#             enriched["rendered"] = self._format_entry_lines(entry)
+#             if self._sheet_id and entry.get("gid") is not None:
+#                 gid = entry["gid"]
+#                 url = f"https://docs.google.com/spreadsheets/d/{self._sheet_id}/edit#gid={gid}&range={entry['row']}"
+#                 enriched["rendered"] += f"\n[シートを開く]({url})"
+#             results.append(enriched)
+
+#         if not results:
+#             await interaction.response.send_message(f"「{keyword}」に該当する結果は見つかりませんでした。", ephemeral=True)
+#             return
+
+#         results.sort(key=lambda item: (-item["score"], -item["count"]))
+
+#         view = self.DictionaryPaginator(keyword=keyword, search_results=results)
+#         await interaction.response.send_message(embed=view.get_current_page_embed(), view=view)
+
+#     @app_commands.command(name="reloaddictionary", description="Googleスプレッドシートから辞書データを再読込します")
+#     async def reload_dictionary(self, interaction: discord.Interaction) -> None:
+#         if not await self._is_operator(interaction):
+#             await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+#             return
+
+#         try:
+#             self._ensure_loaded(force=True)
+#         except Exception as exc:
+#             logger.error("辞書データの再読込に失敗しました: %s", exc)
+#             await interaction.response.send_message("辞書データの再読込に失敗しました。設定を確認してください。", ephemeral=True)
+#             return
+
+#         await interaction.response.send_message("辞書データを再読込しました。", ephemeral=True)
+
+#     @app_commands.command(name="listwords", description="シートごとの登録件数を表示します")
+#     async def list_words(self, interaction: discord.Interaction) -> None:
+#         if not config.is_feature_enabled("dictionary"):
+#             await interaction.response.send_message("この機能は現在無効化されています。", ephemeral=True)
+#             return
+
+#         if not await self._is_operator(interaction):
+#             await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+#             return
+
+#         try:
+#             self._ensure_loaded()
+#         except Exception as exc:
+#             logger.error("辞書データのロードに失敗しました: %s", exc)
+#             await interaction.response.send_message("辞書データの取得に失敗しました。", ephemeral=True)
+#             return
+
+#         if not self._entries:
+#             await interaction.response.send_message("辞書データが読み込まれていません。", ephemeral=True)
+#             return
+
+#         counts: Dict[str, int] = {}
+#         for entry in self._entries:
+#             counts[entry["sheet"]] = counts.get(entry["sheet"], 0) + 1
+
+#         description_lines = [f"{sheet}: {count} 件" for sheet, count in sorted(counts.items())]
+#         embed = discord.Embed(title="📚 登録件数", description="\n".join(description_lines), color=discord.Color.green())
+#         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+#     @app_commands.command(name="addword", description="辞書に単語を追加します（スプレッドシートで編集してください）")
+#     async def add_word(self, interaction: discord.Interaction, word: str, meaning: str) -> None:  # noqa: D401
+#         await interaction.response.send_message(
+#             "このボットはスプレッドシートを参照します。単語の追加・編集はGoogleスプレッドシートで行ってください。",
+#             ephemeral=True,
+#         )
+
+#     @app_commands.command(name="deleteword", description="辞書から単語を削除します（スプレッドシートで編集してください）")
+#     async def delete_word(self, interaction: discord.Interaction, word: str) -> None:  # noqa: D401
+#         await interaction.response.send_message(
+#             "このボットはスプレッドシートを参照します。単語の削除はGoogleスプレッドシートで行ってください。",
+#             ephemeral=True,
+#         )
+
+
+# async def setup(bot: commands.Bot) -> None:
+#     try:
+#         await bot.add_cog(Dictionary(bot))
+#         logger.info("Dictionary cog loaded successfully")
+#     except Exception as exc:
+#         logger.error("Failed to load Dictionary cog: %s", exc)
+#         logger.error(traceback.format_exc())
+#         raise

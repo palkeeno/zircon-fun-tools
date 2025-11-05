@@ -4,6 +4,10 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 
 ## 機能
 
+### 1. 辞書検索
+- Googleスプレッドシートをデータベースとして使用
+- `/search` でキーワード検索、検索結果をEmbedで表示
+<!-- - `/reloaddictionary` でシートを再読み込み -->
 
 ### 2. 占い機能
 - 選択肢の数（1-20）を指定して占うことができます
@@ -48,7 +52,16 @@ ENV=development  # または production
 # Discordボットトークン
 DISCORD_TOKEN_DEV=your_development_token_here
 DISCORD_TOKEN_PROD=your_production_token_here
+
+# Google Sheets（辞書機能）
+DICTIONARY_SHEET_ID=your_google_sheet_id
+# どちらか一方を指定
+# GOOGLE_SERVICE_ACCOUNT_FILE=path/to/service-account.json
+# もしくは JSON文字列を直接指定
+# GOOGLE_SERVICE_ACCOUNT_JSON={"type": "service_account", ... }
 ```
+
+※ サービスアカウントをスプレッドシートに閲覧権限で招待することを忘れないでください。
 
 ### 実行方法
 
