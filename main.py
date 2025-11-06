@@ -10,6 +10,7 @@ import logging
 import traceback
 import sys
 import asyncio
+import setup_fonts
 
 # ロギングの設定
 logging.basicConfig(
@@ -17,6 +18,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# 日本語フォントのセットアップ（Linux環境のみ）
+setup_fonts.setup_fonts_if_needed()
 
 class FunToolsBot(commands.Bot):
     """

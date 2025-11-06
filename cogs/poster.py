@@ -23,13 +23,13 @@ class Poster(commands.Cog):
     /posterコマンドでキャラクターポスターを生成します。
     """
     def __init__(self, bot: commands.Bot):
+        self.bot = bot
         # config.pyからパス・フォント・チャンネルIDを取得
         # フォントは環境により存在しない可能性があるためフォールバックを用意
         self.fontA = self._try_load_font(config.POSTER_FONT_A, 30)
         self.fontB = self._try_load_font(config.POSTER_FONT_B, 40)
         self.fontC = self._try_load_font(config.POSTER_FONT_C, 35)
         self.fontD = self._try_load_font(config.POSTER_FONT_D, 115)
-        self.fontD = ImageFont.truetype(config.POSTER_FONT_D, 115)
         self.card_path = config.POSTER_CARD_PATH
         self.mask_path = config.POSTER_MASK_PATH
         self.peaceful_path = config.POSTER_PEACEFUL_PATH
@@ -43,49 +43,86 @@ class Poster(commands.Cog):
         with open(const_path, encoding='utf-8') as f:
             self.const = json.load(f)
     def _try_load_font(self, prefer_path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-        """フォントを安全に読み込む。存在しない場合はWindows既定フォントやPIL既定にフォールバック。
+        """フォントを安全に読み込む。存在しない場合は自動ダウンロードまたはシステムフォントにフォールバック。
 
         優先順:
         1) config で指定されたパス（相対の場合はリポジトリルートや data/fonts も探索）
-        2) Windows の一般的な日本語フォント（Meiryo/MS Gothic/Yu Gothic）
-        3) PIL のデフォルトフォント
+        2) システムの既存日本語フォント（Windows/Linux 共通）
+        3) Noto Sans JP を Google Fonts からダウンロード（data/fonts/ にキャッシュ）
+        4) PIL のデフォルトフォント
         """
         candidates = []
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        
         # まず指定パス
         if prefer_path:
-            # 絶対/相対問わず候補に入れる
             candidates.append(prefer_path)
-            # 相対ならリポジトリルート・data/fonts も試す
             if not os.path.isabs(prefer_path):
-                repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
                 candidates.append(os.path.join(repo_root, prefer_path))
                 candidates.append(os.path.join(repo_root, 'data', 'fonts', prefer_path))
 
-        # Windows の代表的な日本語フォントパス
-        win_fonts = [
-            r"C:\\Windows\\Fonts\\meiryo.ttc",
-            r"C:\\Windows\\Fonts\\MEIRYO.TTC",
-            r"C:\\Windows\\Fonts\\msgothic.ttc",
-            r"C:\\Windows\\Fonts\\MSGOTHIC.TTC",
-            r"C:\\Windows\\Fonts\\YuGothM.ttc",
-            r"C:\\Windows\\Fonts\\YuGothB.ttc",
+        # システムフォント候補（Windows + Linux）
+        system_fonts = [
+            # Windows
+            r"C:\Windows\Fonts\meiryo.ttc",
+            r"C:\Windows\Fonts\msgothic.ttc",
+            r"C:\Windows\Fonts\YuGothM.ttc",
+            # Linux 一般的なパス
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         ]
-        candidates.extend(win_fonts)
+        candidates.extend(system_fonts)
 
+        # 既存候補を試す
         for path in candidates:
             try:
                 if os.path.exists(path):
                     return ImageFont.truetype(path, size)
             except Exception:
-                # 読み込み失敗時は次の候補へ
                 continue
 
-        logger.warning("フォントを読み込めませんでした。PILのデフォルトフォントを使用します。候補: %s", candidates)
+        # ここまで見つからなければ Noto Sans JP を自動ダウンロード
+        downloaded_font = self._download_fallback_font()
+        if downloaded_font and os.path.exists(downloaded_font):
+            try:
+                return ImageFont.truetype(downloaded_font, size)
+            except Exception:
+                pass
+
+        # 最終手段: PIL デフォルト
+        logger.warning("フォントを読み込めませんでした。PILのデフォルトフォントを使用します。")
+        return ImageFont.load_default()
+
+    def _download_fallback_font(self) -> str:
+        """Google Fonts から Noto Sans JP をダウンロードし、data/fonts/ にキャッシュする。
+
+        Returns:
+            str: ダウンロードしたフォントファイルのパス。失敗時は空文字列。
+        """
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        fonts_dir = os.path.join(repo_root, 'data', 'fonts')
+        os.makedirs(fonts_dir, exist_ok=True)
+        
+        font_path = os.path.join(fonts_dir, 'NotoSansJP-Regular.ttf')
+        
+        # すでにダウンロード済みならそれを返す
+        if os.path.exists(font_path):
+            return font_path
+        
+        # Google Fonts の直リンク（Noto Sans JP Regular）
+        # 注：このURLは変わる可能性があるため、本番では fonts.google.com API や CDN を利用推奨
+        font_url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf"
+        
         try:
-            return ImageFont.load_default()
-        except Exception:
-            # ここまで来ることは稀だが、安全のため更に例外ガード
-            return ImageFont.load_default()
+            logger.info("フォントが見つからないため、Noto Sans JP をダウンロードします: %s", font_url)
+            urllib.request.urlretrieve(font_url, font_path)
+            logger.info("フォントをダウンロードしました: %s", font_path)
+            return font_path
+        except Exception as e:
+            logger.error("フォントのダウンロードに失敗しました: %s", e)
+            return ""
 
     def _draw_poster(self, char, card, mask, peaceful, brave, glory, freedom, info):
         """
