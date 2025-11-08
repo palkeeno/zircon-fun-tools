@@ -263,17 +263,6 @@ class Birthday(commands.Cog):
                 self.birthdays = json.load(f)
                 if not isinstance(self.birthdays, list):
                     self.birthdays = []
-                # 既存データのマイグレーション処理
-                for b in self.birthdays:
-                    # reportedフラグがない場合はFalseで初期化
-                    if "reported" not in b:
-                        b["reported"] = False
-                    # 旧形式（name）を新形式（id_or_name, type=3）に変換
-                    if "name" in b and "id_or_name" not in b:
-                        b["id_or_name"] = b["name"]
-                        del b["name"]
-                    if "type" not in b:
-                        b["type"] = 3  # デフォルトは「その他」
         except Exception as e:
             logger.error(f"Error loading birthdays: {e}")
             logger.error(traceback.format_exc())
