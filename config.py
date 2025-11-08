@@ -49,6 +49,11 @@ OPERATOR_ROLE_ID = int(os.getenv('OPERATOR_ROLE_ID_DEV' if ENV == 'development' 
 if not OPERATOR_ROLE_ID:
     logger.warning("運営ロールが設定されていません。運営ロールが必要なコマンドは使用できません。")
 
+# 即時ギルド同期用のGuild ID（開発/本番で切替可能）
+# 設定すると、そのギルドに対してスラッシュコマンドを即時同期します（数秒で反映）。
+# 未設定(0)の場合はグローバル同期のみとなり、反映まで最大1時間かかることがあります。
+GUILD_ID = int(os.getenv('GUILD_ID_DEV' if ENV == 'development' else 'GUILD_ID_PROD', '0'))
+
 # Birthday機能の設定
 BIRTHDAY_CHANNEL_ID = int(os.getenv('BIRTHDAY_CHANNEL_ID_DEV' if ENV == 'development' else 'BIRTHDAY_CHANNEL_ID_PROD', '0'))
 BIRTHDAY_ANNOUNCE_TIME_HOUR = int(os.getenv('BIRTHDAY_ANNOUNCE_TIME_HOUR', '9'))

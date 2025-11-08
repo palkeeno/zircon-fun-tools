@@ -45,9 +45,24 @@ class FunToolsBot(commands.Bot):
                 except Exception as e:
                     logger.error(f'{extension} のロードに失敗しました: {e}')
                     logger.error(traceback.format_exc())
+            # Slash command sync
             try:
-                synced = await self.tree.sync()
-                logger.info(f"{len(synced)}個のスラッシュコマンドを同期しました")
+                if getattr(config, 'GUILD_ID', 0):
+                    guild = discord.Object(id=config.GUILD_ID)
+                    # 1) ギルド側のコマンドを一旦クリア（重複防止）
+                    self.tree.clear_commands(guild=guild)
+                    # 2) 現在のグローバル定義をギルドへコピー
+                    self.tree.copy_global_to(guild=guild)
+                    # 3) ギルドへ即時同期
+                    guild_synced = await self.tree.sync(guild=guild)
+                    # 4) グローバルコマンドをクリアして、サーバー設定画面での二重登録を解消
+                    self.tree.clear_commands(guild=None)
+                    await self.tree.sync()  # グローバル側を削除反映
+                    logger.info(f"ギルド {config.GUILD_ID} に {len(guild_synced)} 個のスラッシュコマンドを同期（ギルド限定化）し、グローバル定義を削除しました")
+                else:
+                    # グローバル同期（反映まで最長1時間程度かかる）
+                    synced = await self.tree.sync()
+                    logger.info(f"グローバルに {len(synced)} 個のスラッシュコマンドを同期しました（反映には時間がかかる場合があります）")
             except Exception as e:
                 logger.error(f"スラッシュコマンドの同期に失敗しました: {e}")
                 logger.error(traceback.format_exc())
