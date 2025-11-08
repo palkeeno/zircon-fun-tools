@@ -30,6 +30,21 @@ class Admin(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    async def _defer_ephemeral(self, interaction: discord.Interaction) -> None:
+        """Respond early to avoid 'Unknown interaction' by deferring ephemerally.
+
+        Discord requires an initial acknowledgement within ~3 seconds. By deferring
+        immediately, we ensure the token remains valid and we can safely edit the
+        original response later.
+        """
+        try:
+            if not interaction.response.is_done():
+                # thinking=True shows the loading state; keep responses ephemeral
+                await interaction.response.defer(ephemeral=True, thinking=True)
+        except Exception:
+            # If deferring fails, we'll try to continue and handle errors on send.
+            logger.debug("Failed to defer interaction response", exc_info=True)
+
     # --- Backward-compatibility helper for tests ---
     def is_command_enabled(self, name: str) -> bool:
         """Feature flags are deprecated; return True by default.
@@ -73,52 +88,53 @@ class Admin(commands.Cog):
     @app_commands.command(name="permit", description="指定コマンドを指定ロールに限定解除します（そのロール保持者が実行可能に）")
     @app_commands.describe(command_name="スラッシュコマンド名", role="限定解除する対象ロール")
     async def permit(self, interaction: discord.Interaction, command_name: str, role: discord.Role):
+        await self._defer_ephemeral(interaction)
         if not await self._is_operator(interaction):
-            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+            await interaction.edit_original_response(content="このコマンドは運営ロールのみ使用できます。")
             return
         valid = self._valid_command_names()
         if command_name not in valid:
-            await interaction.response.send_message(f"不明なコマンド名です: {command_name}", ephemeral=True)
+            await interaction.edit_original_response(content=f"不明なコマンド名です: {command_name}")
             return
         if interaction.guild is None:
-            await interaction.response.send_message("サーバー内で実行してください。", ephemeral=True)
+            await interaction.edit_original_response(content="サーバー内で実行してください。")
             return
         permissions.grant_permission(interaction.guild.id, command_name, role.id)
-        await interaction.response.send_message(
-            f"コマンド '{command_name}' をロール {role.mention} に限定解除しました。",
-            ephemeral=True,
+        await interaction.edit_original_response(
+            content=f"コマンド '{command_name}' をロール {role.mention} に限定解除しました。",
         )
 
     @app_commands.command(name="permit_revoke", description="限定解除を取り消します")
     @app_commands.describe(command_name="スラッシュコマンド名", role="取り消す対象ロール")
     async def permit_revoke(self, interaction: discord.Interaction, command_name: str, role: discord.Role):
+        await self._defer_ephemeral(interaction)
         if not await self._is_operator(interaction):
-            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+            await interaction.edit_original_response(content="このコマンドは運営ロールのみ使用できます。")
             return
         valid = self._valid_command_names()
         if command_name not in valid:
-            await interaction.response.send_message(f"不明なコマンド名です: {command_name}", ephemeral=True)
+            await interaction.edit_original_response(content=f"不明なコマンド名です: {command_name}")
             return
         if interaction.guild is None:
-            await interaction.response.send_message("サーバー内で実行してください。", ephemeral=True)
+            await interaction.edit_original_response(content="サーバー内で実行してください。")
             return
         permissions.revoke_permission(interaction.guild.id, command_name, role.id)
-        await interaction.response.send_message(
-            f"コマンド '{command_name}' のロール {role.mention} への限定解除を取り消しました。",
-            ephemeral=True,
+        await interaction.edit_original_response(
+            content=f"コマンド '{command_name}' のロール {role.mention} への限定解除を取り消しました。",
         )
 
     @app_commands.command(name="permit_list", description="このサーバーの限定解除状況を一覧表示します")
     async def permit_list(self, interaction: discord.Interaction):
+        await self._defer_ephemeral(interaction)
         if not await self._is_operator(interaction):
-            await interaction.response.send_message("このコマンドは運営ロールのみ使用できます。", ephemeral=True)
+            await interaction.edit_original_response(content="このコマンドは運営ロールのみ使用できます。")
             return
         if interaction.guild is None:
-            await interaction.response.send_message("サーバー内で実行してください。", ephemeral=True)
+            await interaction.edit_original_response(content="サーバー内で実行してください。")
             return
         data = permissions.list_all_permissions(interaction.guild.id)
         if not data:
-            await interaction.response.send_message("現在、限定解除は設定されていません。", ephemeral=True)
+            await interaction.edit_original_response(content="現在、限定解除は設定されていません。")
             return
         # Build description lines with role mentions
         lines = []
@@ -129,7 +145,7 @@ class Admin(commands.Cog):
                 mentions.append(role.mention if role else f"@&{rid}")
             lines.append(f"/{cmd_name}: {', '.join(mentions) if mentions else '(なし)'}")
         embed = discord.Embed(title="限定解除状況", description="\n".join(lines), color=discord.Color.blue())
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.edit_original_response(embed=embed, content=None)
 
 
 async def setup(bot: commands.Bot):

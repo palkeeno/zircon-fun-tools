@@ -37,6 +37,10 @@ ENV/
 .DS_Store
 Thumbs.db
 
+# saved data
+data/overrides.json
+data/birthdays.json
+
 # Poster Assets (large image files)
 data/assets/*.png
 data/assets/*.jpg
