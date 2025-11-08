@@ -33,6 +33,7 @@ class Birthday(commands.Cog):
         self.bot = bot
         self.birthdays = []
         self.birthday_task_started = False
+        self.reported_flag_reset_task_started = False
         self.load_birthdays()
 
     @commands.Cog.listener()
@@ -41,6 +42,9 @@ class Birthday(commands.Cog):
         if not self.birthday_task_started:
             self.birthday_task.start()
             self.birthday_task_started = True
+        if not self.reported_flag_reset_task_started:
+            self.reported_flag_reset_task.start()
+            self.reported_flag_reset_task_started = True
 
     @tasks.loop(hours=24)
     async def birthday_task(self):
@@ -53,24 +57,63 @@ class Birthday(commands.Cog):
         today_birthdays = [b for b in self.birthdays if b["month"] == today_month and b["day"] == today_day]
         if not today_birthdays:
             return
-            
         try:
             channel_id = config.get_birthday_channel_id()
             if not channel_id:
                 logger.warning("誕生日チャンネルIDが設定されていません")
                 return
-                
             channel = self.bot.get_channel(channel_id)
             if channel is None:
                 logger.error(f"誕生日チャンネルが見つかりません: {channel_id}")
                 return
-                
-            names = ', '.join([b["name"] for b in today_birthdays])
+            # 報告済みでない人のみアナウンス
+            unreported_birthdays = [b for b in today_birthdays if not b.get("reported", False)]
+            if not unreported_birthdays:
+                return
+            # 重複（同じ名前・同じ日付）があるユーザは除外
+            unique = {}
+            for b in unreported_birthdays:
+                key = (b["name"], b["month"], b["day"])
+                if key not in unique:
+                    unique[key] = [b]
+                else:
+                    unique[key].append(b)
+            announce_names = []
+            announce_birthdays = []
+            for key, items in unique.items():
+                if len(items) == 1:
+                    announce_names.append(items[0]["name"])
+                    announce_birthdays.append(items[0])
+            if not announce_names:
+                return
+            names = ', '.join(announce_names)
             msg = f"🎉 今日は {names} さんの誕生日です！おめでとうございます！ 🎉"
             await channel.send(msg)
+            # 報告済みフラグをセット
+            for b in announce_birthdays:
+                b["reported"] = True
+            self.save_birthdays()
         except Exception as e:
             logger.error(f"Error in birthday_task: {e}")
             logger.error(traceback.format_exc())
+
+    @tasks.loop(hours=24)
+    async def reported_flag_reset_task(self):
+        """毎日9時に報告済みフラグをリセットするタスク"""
+        now = datetime.datetime.now()
+        # 9時以降のみ実行
+        if now.hour < 9:
+            return
+        today_month = now.month
+        today_day = now.day
+        changed = False
+        for b in self.birthdays:
+            # 今日以外の誕生日はフラグを外す
+            if b.get("reported", False) and not (b["month"] == today_month and b["day"] == today_day):
+                b["reported"] = False
+                changed = True
+        if changed:
+            self.save_birthdays()
 
     def load_birthdays(self):
         """誕生日データを読み込みます（リスト形式）。dataフォルダがなければ作成。"""
@@ -83,6 +126,10 @@ class Birthday(commands.Cog):
                 self.birthdays = json.load(f)
                 if not isinstance(self.birthdays, list):
                     self.birthdays = []
+                # reportedフラグがない場合はFalseで初期化
+                for b in self.birthdays:
+                    if "reported" not in b:
+                        b["reported"] = False
         except Exception as e:
             logger.error(f"Error loading birthdays: {e}")
             logger.error(traceback.format_exc())
@@ -211,7 +258,8 @@ class Birthday(commands.Cog):
             self.birthdays.append({
                 "name": name,
                 "month": month,
-                "day": day
+                "day": day,
+                "reported": False
             })
             self.save_birthdays()
 
