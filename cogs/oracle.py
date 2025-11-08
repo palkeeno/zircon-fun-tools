@@ -9,7 +9,6 @@ from discord.ext import commands
 import random
 import logging
 import traceback
-import config
 import permissions
 
 # ロギングの設定

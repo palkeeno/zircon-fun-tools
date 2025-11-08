@@ -4,7 +4,6 @@
 """
 
 import os
-import json
 import logging
 from typing import Dict, Any
 from dotenv import load_dotenv
@@ -56,12 +55,13 @@ BIRTHDAY_ANNOUNCE_TIME_HOUR = int(os.getenv('BIRTHDAY_ANNOUNCE_TIME_HOUR', '9'))
 BIRTHDAY_ANNOUNCE_TIME_MINUTE = int(os.getenv('BIRTHDAY_ANNOUNCE_TIME_MINUTE', '0'))
 
 # Posterコマンド用の画像・フォント・チャンネル設定
-POSTER_CARD_PATH = os.getenv('POSTER_CARD_PATH', 'card.png')
-POSTER_MASK_PATH = os.getenv('POSTER_MASK_PATH', 'mask.png')
-POSTER_PEACEFUL_PATH = os.getenv('POSTER_PEACEFUL_PATH', 'peaceful.png')
-POSTER_BRAVE_PATH = os.getenv('POSTER_BRAVE_PATH', 'brave.png')
-POSTER_GLORY_PATH = os.getenv('POSTER_GLORY_PATH', 'glory.png')
-POSTER_FREEDOM_PATH = os.getenv('POSTER_FREEDOM_PATH', 'freedom.png')
+# アセットディレクトリのベースパス
+_ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'data', 'assets')
+POSTER_MASK_PATH = os.getenv('POSTER_MASK_PATH', os.path.join(_ASSETS_DIR, 'mask.png'))
+POSTER_PEACEFUL_PATH = os.getenv('POSTER_PEACEFUL_PATH', os.path.join(_ASSETS_DIR, 'peaceful.png'))
+POSTER_BRAVE_PATH = os.getenv('POSTER_BRAVE_PATH', os.path.join(_ASSETS_DIR, 'brave.png'))
+POSTER_GLORY_PATH = os.getenv('POSTER_GLORY_PATH', os.path.join(_ASSETS_DIR, 'glory.png'))
+POSTER_FREEDOM_PATH = os.getenv('POSTER_FREEDOM_PATH', os.path.join(_ASSETS_DIR, 'freedom.png'))
 POSTER_DST_PATH = os.getenv('POSTER_DST_PATH', 'poster_output.png')
 POSTER_FONT_A = os.getenv('POSTER_FONT_A', 'ヒラギノ明朝 ProN.ttc')
 POSTER_FONT_B = os.getenv('POSTER_FONT_B', 'ヒラギノ明朝 ProN.ttc')

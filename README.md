@@ -42,7 +42,14 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. 環境変数の設定
+4. ポスター機能の画像アセット設定（オプション）
+`/poster` コマンドを使用する場合は、以下の画像ファイルを `data/assets/` ディレクトリに配置してください：
+- `mask.png` - キャラクター画像合成用のマスク
+- `peaceful.png`, `brave.png`, `glory.png`, `freedom.png` - 各国旗画像
+
+詳細は `data/assets/README.md` を参照してください。
+
+5. 環境変数の設定
 `.env`ファイルを作成し、以下の内容を記述：
 ```env
 # 環境設定

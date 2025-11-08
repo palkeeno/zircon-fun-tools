@@ -1,8 +1,7 @@
 """
-Discordボットのメインファイル
-このモジュールは、Discordボットの初期化と起動を行います。
+Graceful startup/shutdown entry point for the Discord bot.
+Use this instead of main.py if you want clean Ctrl+C handling without noisy CancelledError traceback.
 """
-
 import discord
 from discord.ext import commands
 import config
@@ -12,22 +11,16 @@ import sys
 import asyncio
 import setup_fonts
 
-# ロギングの設定
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# 日本語フォントのセットアップ（Linux環境のみ）
+# Font setup (Linux only)
 setup_fonts.setup_fonts_if_needed()
 
 class FunToolsBot(commands.Bot):
-    """
-    Discordボットのメインクラス
-    このクラスは、ボットの初期化とコグの読み込みを行います。
-    """
-    
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
@@ -42,10 +35,6 @@ class FunToolsBot(commands.Bot):
         ]
 
     async def setup_hook(self):
-        """
-        ボットの起動時に実行されるフック
-        Cogsの読み込みと同期を行います。
-        """
         try:
             loaded_extensions = []
             for extension in self.initial_extensions:
@@ -56,34 +45,24 @@ class FunToolsBot(commands.Bot):
                 except Exception as e:
                     logger.error(f'{extension} のロードに失敗しました: {e}')
                     logger.error(traceback.format_exc())
-
-            # スラッシュコマンドの同期
             try:
                 synced = await self.tree.sync()
                 logger.info(f"{len(synced)}個のスラッシュコマンドを同期しました")
             except Exception as e:
                 logger.error(f"スラッシュコマンドの同期に失敗しました: {e}")
                 logger.error(traceback.format_exc())
-            self.enabled_extensions = loaded_extensions  # テスト用
+            self.enabled_extensions = loaded_extensions
         except Exception as e:
             logger.error(f'Error in setup_hook: {e}')
             logger.error(traceback.format_exc())
             raise
 
     async def on_ready(self):
-        """
-        ボットの準備が完了したときに実行されるイベント
-        """
         logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
         logger.info('------')
         await self.change_presence(activity=discord.Game(name="/help でコマンド一覧"))
-        
-        # 機能有効/無効の概念は廃止（常時ロード）。必要なら今後は権限で制御します。
 
     async def on_error(self, event_method, *args, **kwargs):
-        """
-        イベントハンドラでエラーが発生したときに実行されるイベント
-        """
         logger.error(f'Error in {event_method}:')
         logger.error(traceback.format_exc())
 
@@ -93,7 +72,6 @@ class FunToolsBot(commands.Bot):
         logger.error(f'コマンドエラー: {error}')
         logger.error(traceback.format_exc())
 
-# ボットの初期化
 try:
     bot = FunToolsBot()
 except Exception as e:
@@ -101,17 +79,28 @@ except Exception as e:
     logger.error(traceback.format_exc())
     sys.exit(1)
 
-# ボットの起動
+async def main():
+    try:
+        async with bot:
+            await bot.start(config.TOKEN)
+    except asyncio.CancelledError:
+        # Silent cancellation (Ctrl+C)
+        logger.info('シャットダウン要求を受け取りました (Cancelled).')
+    except KeyboardInterrupt:
+        logger.info('停止要求を受信しました (Ctrl+C). 終了します。')
+    finally:
+        # Place any cleanup here if needed
+        pass
+
 if __name__ == '__main__':
     try:
-        async def main():
-            async with bot:
-                await bot.start(config.TOKEN)
-
         asyncio.run(main())
     except discord.LoginFailure:
         logger.error('Invalid token provided. Please check your token in the .env file.')
         sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info('停止しました。')
+        sys.exit(0)
     except Exception as e:
         logger.error(f'Unexpected error: {e}')
         logger.error(traceback.format_exc())

@@ -19,6 +19,9 @@ import config
 _LOG = logging.getLogger(__name__)
 _OVERRIDES_PATH = os.path.join("data", "overrides.json")
 
+# 誰でも実行できるコマンド（権限チェックをスキップ）
+PUBLIC_COMMANDS = {'poster', 'oracle', 'birthday'}
+
 
 def _ensure_data_dir():
     os.makedirs("data", exist_ok=True)
@@ -111,9 +114,14 @@ def is_operator_member(member: Optional[discord.Member]) -> bool:
 def can_run_command(interaction: discord.Interaction, command_name: str) -> bool:
     """Permission rule: operators may always run; others only if their guild role is permitted.
 
+    - Public commands (poster, oracle) are accessible to everyone.
     - DMs: only operators (no roles to check).
     - Guild: return True if operator or has at least one permitted role for the command.
     """
+    # パブリックコマンドは誰でも実行可能
+    if command_name in PUBLIC_COMMANDS:
+        return True
+    
     member: Optional[discord.Member]
     if isinstance(interaction.user, discord.Member):
         member = interaction.user

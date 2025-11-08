@@ -35,4 +35,13 @@ ENV/
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Poster Assets (large image files)
+data/assets/*.png
+data/assets/*.jpg
+data/assets/*.jpeg
+!data/assets/README.md
+
+# Generated poster output
+poster_output.png
