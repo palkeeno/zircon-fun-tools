@@ -70,7 +70,8 @@ class Birthday(commands.Cog):
             unreported_birthdays = [b for b in today_birthdays if not b.get("reported", False)]
             if not unreported_birthdays:
                 return
-            # 重複（同じ名前・同じ日付）があるユーザは除外
+            # 同じ日付の別名もまとめず、1人ずつ個別に発表
+            # ただし、同じ名前・同じ日付が複数ある場合はスキップ
             unique = {}
             for b in unreported_birthdays:
                 key = (b["name"], b["month"], b["day"])
@@ -78,20 +79,12 @@ class Birthday(commands.Cog):
                     unique[key] = [b]
                 else:
                     unique[key].append(b)
-            announce_names = []
-            announce_birthdays = []
             for key, items in unique.items():
                 if len(items) == 1:
-                    announce_names.append(items[0]["name"])
-                    announce_birthdays.append(items[0])
-            if not announce_names:
-                return
-            names = ', '.join(announce_names)
-            msg = f"🎉 今日は {names} さんの誕生日です！おめでとうございます！ 🎉"
-            await channel.send(msg)
-            # 報告済みフラグをセット
-            for b in announce_birthdays:
-                b["reported"] = True
+                    b = items[0]
+                    msg = f"🎉 今日は {b['name']} さんの誕生日です！おめでとうございます！ 🎉"
+                    await channel.send(msg)
+                    b["reported"] = True
             self.save_birthdays()
         except Exception as e:
             logger.error(f"Error in birthday_task: {e}")
