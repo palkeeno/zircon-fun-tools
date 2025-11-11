@@ -106,6 +106,7 @@ class Birthday(commands.Cog):
         self.birthday_task_started = False
         self.reported_flag_reset_task_started = False
         self.load_birthdays()
+        logger.info("Birthday が初期化されました")
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -253,22 +254,22 @@ class Birthday(commands.Cog):
             logger.error(traceback.format_exc())
 
     @app_commands.command(
-        name="removebirthday",
+        name="birthday_delete",
         description="登録されている誕生日を削除します"
     )
     @app_commands.describe(
-        search="削除したいキャラクター番号または名前"
+        id="削除したいキャラクターID"
     )
-    async def remove_birthday(self, interaction: discord.Interaction, search: str):
+    async def birthday_delete(self, interaction: discord.Interaction, id: str):
         """
-        キャラクター番号または名前で誕生日を削除。複数候補時はリスト表示し、番号指定で削除。
+        キャラクターIDで誕生日を削除します。
         
         Args:
             interaction (discord.Interaction): インタラクション
-            search (str): 削除したいキャラクター番号または名前
+            id (str): 削除したいキャラクターID
         """
         # 権限チェック
-        if not permissions.can_run_command(interaction, 'removebirthday'):
+        if not permissions.can_run_command(interaction, 'birthday_delete'):
             await interaction.response.send_message(
                 "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
                 ephemeral=True
@@ -276,57 +277,28 @@ class Birthday(commands.Cog):
             return
 
         try:
-            # 候補抽出
+            # 該当するキャラクターを検索
             candidates = [b for b in self.birthdays 
-                         if search in b.get("character_id", "") or search in b.get("name", "")]
+                         if b.get("character_id", "") == id]
             if not candidates:
                 await interaction.response.send_message(
-                    "該当する誕生日はありません。",
+                    f"キャラクターID `{id}` の誕生日は登録されていません。",
                     ephemeral=True
                 )
                 return
-                
-            if len(candidates) == 1:
-                self.birthdays.remove(candidates[0])
-                self.save_birthdays()
-                char_id = candidates[0].get("character_id", "???")
-                name = candidates[0].get("name", "不明")
-                await interaction.response.send_message(
-                    f"{name} (#{char_id}) {candidates[0]['month']}月{candidates[0]['day']}日 の誕生日を削除しました。",
-                    ephemeral=True
-                )
-                return
-
-            # 複数候補時はリスト表示し、番号指定を待つ
-            msg = "複数該当があります。削除したい番号を返信してください:\n"
-            for idx, b in enumerate(candidates, 1):
-                char_id = b.get("character_id", "???")
-                name = b.get("name", "不明")
-                msg += f"{idx}. {name} (#{char_id}) {b['month']}月{b['day']}日\n"
-            await interaction.response.send_message(msg, ephemeral=True)
-
-            def check(m):
-                return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id
-
-            try:
-                reply = await self.bot.wait_for('message', check=check, timeout=30)
-                num = int(reply.content)
-                if 1 <= num <= len(candidates):
-                    removed = candidates[num-1]
-                    self.birthdays.remove(removed)
-                    self.save_birthdays()
-                    char_id = removed.get("character_id", "???")
-                    name = removed.get("name", "不明")
-                    await interaction.followup.send(
-                        f"{name} (#{char_id}) {removed['month']}月{removed['day']}日 の誕生日を削除しました。",
-                        ephemeral=True
-                    )
-                else:
-                    await interaction.followup.send("無効な番号です。削除を中止しました。", ephemeral=True)
-            except Exception:
-                await interaction.followup.send("番号の返信がなかったため削除を中止しました。", ephemeral=True)
+            
+            # 該当するキャラクターの誕生日を削除
+            removed = candidates[0]
+            self.birthdays.remove(removed)
+            self.save_birthdays()
+            char_id = removed.get("character_id", "???")
+            name = removed.get("name", "不明")
+            await interaction.response.send_message(
+                f"{name} (#{char_id}) {removed['month']}月{removed['day']}日 の誕生日を削除しました。",
+                ephemeral=True
+            )
         except Exception as e:
-            logger.error(f"Error in remove_birthday: {e}")
+            logger.error(f"Error in birthday_delete: {e}", exc_info=True)
             logger.error(traceback.format_exc())
             await interaction.response.send_message(
                 "エラーが発生しました。もう一度お試しください。",
@@ -334,26 +306,26 @@ class Birthday(commands.Cog):
             )
 
     @app_commands.command(
-        name="addbirthday",
+        name="birthday_add",
         description="Zirconキャラクターの誕生日を登録します"
     )
     @app_commands.describe(
-        character_id="Zirconキャラクター番号",
+        id="Zirconキャラクター番号",
         month="月（1-12）",
-        day="日（1-31）"
+        date="日（1-31）"
     )
-    async def add_birthday(self, interaction: discord.Interaction, character_id: str, month: int, day: int):
+    async def birthday_add(self, interaction: discord.Interaction, id: str, month: int, date: int):
         """
         Zirconキャラクターの誕生日を登録します。
         
         Args:
             interaction (discord.Interaction): インタラクション
-            character_id (str): キャラクター番号
+            id (str): キャラクター番号
             month (int): 月
-            day (int): 日
+            date (int): 日
         """
         # 権限チェック
-        if not permissions.can_run_command(interaction, 'addbirthday'):
+        if not permissions.can_run_command(interaction, 'birthday_add'):
             await interaction.response.send_message(
                 "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
                 ephemeral=True
@@ -364,7 +336,7 @@ class Birthday(commands.Cog):
             await interaction.response.defer(ephemeral=True)
             
             # 日付のバリデーション
-            if not (1 <= month <= 12 and 1 <= day <= 31):
+            if not (1 <= month <= 12 and 1 <= date <= 31):
                 await interaction.followup.send(
                     "無効な日付です。月は1-12、日は1-31の範囲で指定してください。",
                     ephemeral=True
@@ -381,7 +353,7 @@ class Birthday(commands.Cog):
                 chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
                 
                 driver = webdriver.Chrome(options=chrome_options)
-                driver.get(f"https://zircon.konami.net/nft/character/{character_id}")
+                driver.get(f"https://zircon.konami.net/nft/character/{id}")
                 import time
                 time.sleep(2)
                 html = driver.page_source.encode("utf-8")
@@ -402,10 +374,10 @@ class Birthday(commands.Cog):
 
             # データ追加
             self.birthdays.append({
-                "character_id": character_id,
+                "character_id": id,
                 "name": char_name,
                 "month": month,
-                "day": day,
+                "day": date,
                 "reported": False
             })
             
@@ -414,11 +386,11 @@ class Birthday(commands.Cog):
             self.save_birthdays()
 
             await interaction.followup.send(
-                f"誕生日を登録しました：{char_name} (#{character_id}) {month}月{day}日",
+                f"誕生日を登録しました：{char_name} (#{id}) {month}月{date}日",
                 ephemeral=True
             )
         except Exception as e:
-            logger.error(f"Error in add_birthday: {e}")
+            logger.error(f"Error in birthday_add: {e}", exc_info=True)
             logger.error(traceback.format_exc())
             await interaction.followup.send(
                 "エラーが発生しました。もう一度お試しください。",
@@ -426,21 +398,18 @@ class Birthday(commands.Cog):
             )
 
     @app_commands.command(
-        name="birthdays",
+        name="birthday_list",
         description="登録されている誕生日の一覧を表示します"
     )
-    @app_commands.describe(
-        search="キャラクター番号または名前で絞り込み（オプション）"
-    )
-    async def list_birthdays(self, interaction: discord.Interaction, search: str = None):
+    async def birthday_list(self, interaction: discord.Interaction):
         """
-        登録されている誕生日の一覧を表示します。引数searchでフィルタ可能。
+        登録されている誕生日の一覧を表示します。
+        
         Args:
             interaction (discord.Interaction): インタラクション
-            search (str, optional): キャラクター番号または名前で絞り込み
         """
         # 権限チェック
-        if not permissions.can_run_command(interaction, 'birthdays'):
+        if not permissions.can_run_command(interaction, 'birthday_list'):
             await interaction.response.send_message(
                 "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
                 ephemeral=True
@@ -448,23 +417,16 @@ class Birthday(commands.Cog):
             return
 
         try:
-            # searchでフィルタ
-            if search:
-                filtered = [b for b in self.birthdays 
-                           if search in b.get("character_id", "") or search in b.get("name", "")]
-            else:
-                filtered = self.birthdays
-
-            if not filtered:
+            if not self.birthdays:
                 await interaction.response.send_message(
-                    "該当する誕生日はありません。",
+                    "登録されている誕生日はありません。",
                     ephemeral=True
                 )
                 return
 
             # 誕生日順にソート（データは既にソート済みだが念のため）
             sorted_birthdays = sorted(
-                filtered,
+                self.birthdays,
                 key=lambda x: (x["month"], x["day"])
             )
 
@@ -497,21 +459,101 @@ class Birthday(commands.Cog):
                 
                 await interaction.response.send_message(embed=embed)
         except Exception as e:
-            logger.error(f"Error in list_birthdays: {e}")
-            logger.error(traceback.format_exc())
+            logger.error(f"Error in birthday_list: {e}", exc_info=True)
             await interaction.response.send_message(
                 "エラーが発生しました。もう一度お試しください。",
                 ephemeral=True
             )
 
     @app_commands.command(
-        name="importbirthdays",
+        name="birthday_search",
+        description="特定のキャラクターの誕生日を検索します"
+    )
+    @app_commands.describe(
+        id_or_name="検索したいキャラクターIDまたは名前"
+    )
+    async def birthday_search(self, interaction: discord.Interaction, id_or_name: str):
+        """
+        キャラクターIDまたは名前で誕生日を検索します。
+        
+        Args:
+            interaction (discord.Interaction): インタラクション
+            id_or_name (str): キャラクターIDまたは名前
+        """
+        # 権限チェック
+        if not permissions.can_run_command(interaction, 'birthday_search'):
+            await interaction.response.send_message(
+                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
+                ephemeral=True
+            )
+            return
+
+        try:
+            # IDまたは名前で検索（部分一致）
+            candidates = [b for b in self.birthdays 
+                         if id_or_name in b.get("character_id", "") or id_or_name.lower() in b.get("name", "").lower()]
+            
+            if not candidates:
+                await interaction.response.send_message(
+                    f"`{id_or_name}` に一致するキャラクターの誕生日は登録されていません。",
+                    ephemeral=True
+                )
+                return
+            
+            # 1件の場合は詳細表示
+            if len(candidates) == 1:
+                result = candidates[0]
+                char_id = result.get("character_id", "???")
+                char_name = result.get("name", "不明")
+                month = result.get("month", 0)
+                day = result.get("day", 0)
+                
+                embed = discord.Embed(
+                    title="🎂 誕生日情報",
+                    color=discord.Color.pink()
+                )
+                embed.add_field(name="キャラクターID", value=char_id, inline=True)
+                embed.add_field(name="名前", value=char_name, inline=True)
+                embed.add_field(name="誕生日", value=f"{month}月{day}日", inline=True)
+                
+                await interaction.response.send_message(embed=embed)
+            else:
+                # 複数件の場合は一覧表示
+                embed = discord.Embed(
+                    title=f"🎂 検索結果: {len(candidates)}件",
+                    description=f"`{id_or_name}` で検索した結果",
+                    color=discord.Color.pink()
+                )
+                
+                lines = []
+                for b in candidates[:10]:  # 最大10件まで表示
+                    char_id = b.get("character_id", "???")
+                    name = b.get("name", "不明")
+                    month = b.get("month", 0)
+                    day = b.get("day", 0)
+                    lines.append(f"**{name}** (#{char_id}) - {month}月{day}日")
+                
+                embed.add_field(name="該当キャラクター", value="\n".join(lines), inline=False)
+                
+                if len(candidates) > 10:
+                    embed.set_footer(text=f"※ 10件以上該当しました。さらに絞り込んでください。")
+                
+                await interaction.response.send_message(embed=embed)
+        except Exception as e:
+            logger.error(f"Error in birthday_search: {e}", exc_info=True)
+            await interaction.response.send_message(
+                "エラーが発生しました。もう一度お試しください。",
+                ephemeral=True
+            )
+
+    @app_commands.command(
+        name="birthday_import",
         description="CSVファイルから誕生日を一括登録します"
     )
     @app_commands.describe(
         file="character_id,month,day のCSVファイルを添付してください"
     )
-    async def import_birthdays(self, interaction: discord.Interaction, file: discord.Attachment):
+    async def birthday_import(self, interaction: discord.Interaction, file: discord.Attachment):
         """
         CSVをインポートして誕生日を一括登録します。
 
@@ -523,7 +565,7 @@ class Birthday(commands.Cog):
         キャラクター名は自動取得されます。
         """
         # 権限チェック
-        if not permissions.can_run_command(interaction, 'importbirthdays'):
+        if not permissions.can_run_command(interaction, 'birthday_import'):
             await interaction.response.send_message(
                 "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
                 ephemeral=True

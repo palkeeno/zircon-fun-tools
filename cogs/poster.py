@@ -33,6 +33,7 @@ class Poster(commands.Cog):
         
         # 画像アセットの存在確認
         self._check_assets()
+        logger.info("Poster が初期化されました")
     
     def _check_assets(self):
         """オプション画像アセットの存在を確認し、情報を出力する"""
@@ -560,9 +561,9 @@ class Poster(commands.Cog):
         description="キャラクターポスターを作成します"
     )
     @app_commands.describe(
-        number="キャラクターの番号を入力してください"
+        character_id="キャラクターIDを入力してください"
     )
-    async def poster(self, interaction: discord.Interaction, number: str):
+    async def poster(self, interaction: discord.Interaction, character_id: str):
         # 権限チェック
         if not permissions.can_run_command(interaction, 'poster'):
             await interaction.response.send_message(
@@ -591,10 +592,10 @@ class Poster(commands.Cog):
         driver = None
         try:
             # キャラ画像URL取得
-            if len(number) <= 4:
-                url = f"https://storage.googleapis.com/prd-azz-image/pfp_{number}.webp"
+            if len(character_id) <= 4:
+                url = f"https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.webp"
             else:
-                url = f"https://storage.googleapis.com/prd-azz-image/pfp_{number}.png"
+                url = f"https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.png"
             try:
                 urllib.request.urlretrieve(url, self.dst_path)
             except Exception as e:
@@ -632,7 +633,7 @@ class Poster(commands.Cog):
                 chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])  # DevToolsログ抑制
                 
                 driver = webdriver.Chrome(options=chrome_options)
-                driver.get(f"https://zircon.konami.net/nft/character/{number}")
+                driver.get(f"https://zircon.konami.net/nft/character/{character_id}")
                 time.sleep(3)
                 html = driver.page_source.encode("utf-8")
                 soup = BeautifulSoup(html, "html.parser")
@@ -669,9 +670,9 @@ class Poster(commands.Cog):
                 return
             # ポスター画像をユーザーに送信
             try:
-                filename = f"poster_{number}.png"
+                filename = f"poster_{character_id}.png"
                 await interaction.followup.send(
-                    content=f"✅ キャラクター #{number} のポスターが完成しました！",
+                    content=f"✅ キャラクター #{character_id} のポスターが完成しました！",
                     file=discord.File(img_bytes, filename=filename)
                 )
             except Exception as e:

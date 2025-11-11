@@ -146,6 +146,7 @@ class Lottery(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        logger.info("Lottery が初期化されました")
 
     async def _is_operator(self, interaction: discord.Interaction) -> bool:
         # kept for backward compatibility where referenced; delegate to permissions helper

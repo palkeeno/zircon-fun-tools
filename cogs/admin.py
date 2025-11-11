@@ -29,6 +29,7 @@ class Admin(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        logger.info("Admin が初期化されました")
 
     async def _defer_ephemeral(self, interaction: discord.Interaction) -> None:
         """Respond early to avoid 'Unknown interaction' by deferring ephemerally.
@@ -85,42 +86,42 @@ class Admin(commands.Cog):
         except Exception:
             return set()
 
-    @app_commands.command(name="permit", description="指定コマンドを指定ロールに限定解除します（そのロール保持者が実行可能に）")
-    @app_commands.describe(command_name="スラッシュコマンド名", role="限定解除する対象ロール")
-    async def permit(self, interaction: discord.Interaction, command_name: str, role: discord.Role):
+    @app_commands.command(name="permit_grant", description="指定コマンドを指定ロールに限定解除します（そのロール保持者が実行可能に）")
+    @app_commands.describe(command="スラッシュコマンド名", role="限定解除する対象ロール")
+    async def permit_grant(self, interaction: discord.Interaction, command: str, role: discord.Role):
         await self._defer_ephemeral(interaction)
         if not await self._is_operator(interaction):
             await interaction.edit_original_response(content="このコマンドは運営ロールのみ使用できます。")
             return
         valid = self._valid_command_names()
-        if command_name not in valid:
-            await interaction.edit_original_response(content=f"不明なコマンド名です: {command_name}")
+        if command not in valid:
+            await interaction.edit_original_response(content=f"不明なコマンド名です: {command}")
             return
         if interaction.guild is None:
             await interaction.edit_original_response(content="サーバー内で実行してください。")
             return
-        permissions.grant_permission(interaction.guild.id, command_name, role.id)
+        permissions.grant_permission(interaction.guild.id, command, role.id)
         await interaction.edit_original_response(
-            content=f"コマンド '{command_name}' をロール {role.mention} に限定解除しました。",
+            content=f"コマンド '{command}' をロール {role.mention} に限定解除しました。",
         )
 
     @app_commands.command(name="permit_revoke", description="限定解除を取り消します")
-    @app_commands.describe(command_name="スラッシュコマンド名", role="取り消す対象ロール")
-    async def permit_revoke(self, interaction: discord.Interaction, command_name: str, role: discord.Role):
+    @app_commands.describe(command="スラッシュコマンド名", role="取り消す対象ロール")
+    async def permit_revoke(self, interaction: discord.Interaction, command: str, role: discord.Role):
         await self._defer_ephemeral(interaction)
         if not await self._is_operator(interaction):
             await interaction.edit_original_response(content="このコマンドは運営ロールのみ使用できます。")
             return
         valid = self._valid_command_names()
-        if command_name not in valid:
-            await interaction.edit_original_response(content=f"不明なコマンド名です: {command_name}")
+        if command not in valid:
+            await interaction.edit_original_response(content=f"不明なコマンド名です: {command}")
             return
         if interaction.guild is None:
             await interaction.edit_original_response(content="サーバー内で実行してください。")
             return
-        permissions.revoke_permission(interaction.guild.id, command_name, role.id)
+        permissions.revoke_permission(interaction.guild.id, command, role.id)
         await interaction.edit_original_response(
-            content=f"コマンド '{command_name}' のロール {role.mention} への限定解除を取り消しました。",
+            content=f"コマンド '{command}' のロール {role.mention} への限定解除を取り消しました。",
         )
 
     @app_commands.command(name="permit_list", description="このサーバーの限定解除状況を一覧表示します")

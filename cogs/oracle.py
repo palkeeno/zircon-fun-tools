@@ -95,11 +95,20 @@ class Oracle(commands.Cog):
             await interaction.followup.send(message)
 
         except Exception as e:
-            logger.error(f"選択肢アドバイスコマンド実行中にエラーが発生しました: {e}\n{traceback.format_exc()}")
-            await interaction.response.send_message(
-                "申し訳ありません。エラーが発生しました。",
-                ephemeral=True
-            )
+            logger.error(f"選択肢アドバイスコマンド実行中にエラーが発生しました: {e}", exc_info=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "申し訳ありません。エラーが発生しました。",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        "申し訳ありません。エラーが発生しました。",
+                        ephemeral=True
+                    )
+            except Exception as followup_error:
+                logger.error(f"エラーメッセージの送信に失敗しました: {followup_error}", exc_info=True)
 
 async def setup(bot: commands.Bot):
     """
