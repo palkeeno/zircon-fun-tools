@@ -9,7 +9,7 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 
 **利用可能なコマンド:**
 - `/birthday_list` - 登録されている全ての誕生日を一覧表示（ページネーション付き）
-- `/birthday_search id_or_name:<キャラID or キャラ名` - 特定のキャラクターの誕生日をIDか名前で検索
+- `/birthday_search id_or_name:<キャラID or キャラ名>` - 特定のキャラクターの誕生日をIDか名前で検索
 - `/birthday_add id:<キャラID> month:<月> date:<日>` - 誕生日を登録（運営のみ）
 - `/birthday_delete id:<キャラID>` - 誕生日を削除（運営のみ）
 - `/birthday_import file:<CSVファイル>` - CSV形式で一括インポート（運営のみ）
