@@ -7,11 +7,13 @@ from .oracle import Oracle
 from .admin import Admin
 from .lottery import Lottery
 from .poster import Poster
+from .quotes import Quotes
 
 __all__ = [
     'Birthday',
     'Oracle',
     'Admin',
     'Lottery',
-    'Poster'
+    'Poster',
+    'Quotes'
 ] 

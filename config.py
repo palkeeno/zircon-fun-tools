@@ -5,7 +5,7 @@
 
 import os
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
 # ロギングの設定
@@ -21,6 +21,17 @@ except Exception as e:
 
 # 環境設定
 ENV = os.getenv('ENV', 'development')  # デフォルトは開発環境
+
+
+def _safe_int(value: Optional[str], default: int) -> int:
+    """環境変数を整数として解釈し、失敗時はデフォルト値を返す。"""
+    try:
+        if value is None:
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        logger.warning("環境変数の整数変換に失敗しました。value=%s, default=%s", value, default)
+        return default
 
 # Discordボットの設定
 
@@ -74,6 +85,13 @@ POSTER_FONT_C = os.getenv('POSTER_FONT_C', 'ヒラギノ明朝 ProN.ttc')
 POSTER_FONT_D = os.getenv('POSTER_FONT_D', 'ヒラギノ明朝 ProN.ttc')
 POSTER_CHANNEL_ID = int(os.getenv('POSTER_CHANNEL_ID', '0'))
 
+# Quotes 機能の設定
+QUOTE_CHANNEL_ID = _safe_int(os.getenv('QUOTE_CHANNEL_ID_DEV' if ENV == 'development' else 'QUOTE_CHANNEL_ID_PROD', '0'), 0)
+QUOTE_POST_ENABLED = os.getenv('QUOTE_POST_ENABLED', 'true').lower() in {'true', '1', 'yes'}
+QUOTE_SCHEDULE_DAYS = max(1, _safe_int(os.getenv('QUOTE_SCHEDULE_DAYS', '1'), 1))
+QUOTE_SCHEDULE_HOUR = max(0, min(23, _safe_int(os.getenv('QUOTE_SCHEDULE_HOUR', '9'), 9)))
+QUOTE_SCHEDULE_MINUTE = max(0, min(59, _safe_int(os.getenv('QUOTE_SCHEDULE_MINUTE', '0'), 0)))
+
 # 機能の設定
 FEATURES = {
     "birthday": {
@@ -100,6 +118,16 @@ FEATURES = {
     "poster": {
         "enabled": True, 
         "settings": {}
+    },
+    "quotes": {
+        "enabled": True,
+        "settings": {
+            "default_enabled": QUOTE_POST_ENABLED,
+            "days": QUOTE_SCHEDULE_DAYS,
+            "hour": QUOTE_SCHEDULE_HOUR,
+            "minute": QUOTE_SCHEDULE_MINUTE,
+            "channel_id": QUOTE_CHANNEL_ID
+        }
     }
 }
 
@@ -148,3 +176,8 @@ def get_birthday_channel_id() -> int:
         int: 誕生日通知チャンネルのID
     """
     return BIRTHDAY_CHANNEL_ID
+
+
+def get_quote_channel_id() -> int:
+    """名言投稿チャンネルのIDを取得します。"""
+    return QUOTE_CHANNEL_ID
