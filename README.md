@@ -57,6 +57,74 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 **制限:**
 - 運営ロールを持つメンバーのみ実行可能
 
+### 6. 名言投稿（定期配信）(`/quote_*`)
+名言を登録し、指定したスケジュールで自動投稿します。キャラクターIDが登録されている場合は公式サイトからキャラクター画像を取得し、埋め込みのサムネイルに設定します。
+
+公式サイト: https://zircon.konami.net/nft/character/{character_id}
+
+サムネイル画像取得は、既存のポスター機能と同様に以下のURLを利用します（高速・安定のため）。
+- https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.webp（主に4桁以下）
+- https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.png
+
+埋め込みの構成:
+- タイトル: 発言者名（必須フィールド）
+- 説明: 名言本文
+- サムネイル: キャラクター画像（キャラクターIDが登録されている場合のみ）
+- URL: 公式キャラページ（キャラクターIDが登録されている場合のみ）
+- フッター: `#<character_id> · quote_id:<内部ID>` （キャラクターIDが登録されている場合は `#` 付き、未登録の場合は `quote_id:<内部ID>` のみ）
+
+利用可能なコマンド:
+- `/quote_list [page:<ページ番号>]` – 登録されている全ての名言を一覧表示（ページネーション付き、1ページ10件）
+- `/quote_search keyword:<キーワード>` – 発言者名または名言本文からキーワード検索
+- `/quote_add speaker:<発言者名> text:<名言本文> [character_id:<キャラクターID>]` – 名言を1件登録（character_idは任意）
+- `/quote_edit quote_id:<名言ID> [speaker:<発言者名>] [text:<名言本文>] [character_id:<キャラクターID>]` – 名言情報を編集（運営のみ）
+- `/quote_delete quote_id:<名言ID>` – 名言を削除（運営のみ）
+- `/quote_import file:<CSVファイル>` – 名言を一括登録（CSV）（運営のみ）
+- `/quote_toggle enabled:<true|false>` – 定期投稿のON/OFF切替（運営のみ）
+- `/quote_schedule days:<日数> hour:<時> minute:<分>` – 定期投稿のスケジュールを設定（例: days=1, hour=9, minute=0 で毎日9:00）（運営のみ）
+
+**名言IDの確認方法:**
+- `/quote_list` で一覧表示時に各名言のIDが表示されます
+- `/quote_search` で検索した結果にもIDが表示されます
+- 定期投稿された名言のフッターに `quote_id:<ID>` が表示されます
+
+CSVフォーマット（UTF-8 / BOM可）:
+```
+speaker,text[,character_id]
+リオン,この勝負、もらった！,123
+アリア,やるしかないんだ！,045
+ナレーター,物語は続く...
+```
+- ヘッダ行は任意（上記例を推奨）
+- `speaker`（発言者名）は必須
+- `text`（名言本文）は必須
+- `character_id` は任意（指定するとサムネイルと公式ページURLが設定される）
+
+権限:
+- 追加/編集/削除/インポート/設定系（toggle, schedule）は運営ロール、または `permissions.can_run_command()` により許可されたロールのみ
+- 通常の閲覧や投稿はボットが自動で行います
+
+データ保存:
+- `data/quotes.json` に保存（自動生成）
+- レコード例:
+   ```json
+   {
+      "id": "uuid-v4",
+      "speaker": "リオン",
+      "character_id": "123",
+      "text": "名言本文",
+      "created_by": 123456789012345678,
+      "created_at": "2025-11-13T09:00:00+09:00",
+      "updated_at": "2025-11-13T09:00:00+09:00"
+   }
+   ```
+
+定期投稿の動作:
+- 既定では `days=1, hour=9, minute=0`（毎日9:00）に `QUOTE_CHANNEL_ID_*` へランダムな1件を投稿
+- 同一名言の連続投稿は避ける（直前投稿の再選出をスキップ）
+- キャラクターIDが登録されている場合のみ、既存 `cogs/poster.py` と同様のロジックで画像取得（公式ページのスクレイピング + 画像は GCS の pfp_*）
+- 設定はコマンドで変更可（オン/オフ、スケジュール）し、永続化
+
 ## セットアップ
 
 ### 必要な環境
@@ -158,6 +226,19 @@ BIRTHDAY_ANNOUNCE_TIME_HOUR=9
 BIRTHDAY_ANNOUNCE_TIME_MINUTE=0
 
 # ========================================
+# 名言機能の設定（オプション）
+# ========================================
+# 名言の定期投稿を行うチャンネル
+QUOTE_CHANNEL_ID_DEV=your_quote_channel_id_here
+QUOTE_CHANNEL_ID_PROD=0
+
+# 名言定期投稿の有効/無効（コマンドで変更可能、ここは初期値）
+QUOTE_POST_ENABLED=true
+
+# 投稿間隔（分） 例: 1440=1日
+QUOTE_POST_INTERVAL_MINUTES=1440
+
+# ========================================
 # ポスター機能の設定（オプション）
 # ========================================
 # 画像アセットのパス（デフォルトは data/assets/ 配下）
@@ -185,6 +266,7 @@ POSTER_CHANNEL_ID=0
 `data/` ディレクトリが自動作成されます。以下のファイルが使用されます：
 - `data/birthdays.json` - 誕生日データ（自動生成）
 - `data/overrides.json` - 誕生日のオーバーライドデータ（自動生成）
+- `data/quotes.json` - 名言データ（自動生成）
 - `data/assets/` - ポスター機能用の画像アセット（手動配置）
 
 6. **ポスター機能の画像アセット設定（オプション）**
@@ -251,10 +333,12 @@ zircon-fun-tools/
 │   ├── oracle.py        # 占い機能
 │   ├── lottery.py       # 抽選機能
 │   ├── poster.py        # ポスター生成機能
+│   ├── quotes.py        # 名言投稿機能（新規）
 │   └── admin.py         # 権限管理機能
 ├── data/                # データファイル（自動生成）
 │   ├── birthdays.json
 │   ├── overrides.json
+│   ├── quotes.json      # 名言データ
 │   └── assets/          # 画像アセット（手動配置）
 └── test/                # テストコード
     └── ...
@@ -266,6 +350,7 @@ zircon-fun-tools/
 - **Cog システム**: 機能ごとにモジュール化
 - **環境変数管理**: `.env` + `config.py` で一元管理
 - **権限システム**: `permissions.py` で柔軟な権限制御
+- **名言機能**: CSV/単発登録・編集・削除・定期投稿（埋め込みにキャラ画像・名前）
 
 詳細な設計思想やコーディング規約については、`INSTRUCTIONS.md` を参照してください。
 
