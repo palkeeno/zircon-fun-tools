@@ -52,7 +52,6 @@ class TestConfig(unittest.TestCase):
         import config
 
         settings = config.get_feature_settings('birthday')
-        self.assertEqual(settings['notification_time'], '09:00')
         self.assertEqual(settings['timezone'], 'Asia/Tokyo')
         settings = config.get_feature_settings('nonexistent_feature')
         self.assertEqual(settings, {})

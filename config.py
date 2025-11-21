@@ -4,6 +4,7 @@
 """
 
 import os
+import json
 import logging
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
@@ -22,6 +23,9 @@ except Exception as e:
 # 環境設定
 ENV = os.getenv('ENV', 'development')  # デフォルトは開発環境
 
+_DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+_RUNTIME_CONFIG_PATH = os.path.join(_DATA_DIR, 'config.json')
+
 
 def _safe_int(value: Optional[str], default: int) -> int:
     """環境変数を整数として解釈し、失敗時はデフォルト値を返す。"""
@@ -32,6 +36,52 @@ def _safe_int(value: Optional[str], default: int) -> int:
     except (TypeError, ValueError):
         logger.warning("環境変数の整数変換に失敗しました。value=%s, default=%s", value, default)
         return default
+
+
+def _ensure_data_dir() -> None:
+    os.makedirs(_DATA_DIR, exist_ok=True)
+
+
+def _load_runtime_config() -> Dict[str, Any]:
+    _ensure_data_dir()
+    if not os.path.exists(_RUNTIME_CONFIG_PATH):
+        return {}
+    try:
+        with open(_RUNTIME_CONFIG_PATH, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except json.JSONDecodeError as exc:
+        logger.warning("runtime config の読み込みに失敗しました: %s", exc)
+        return {}
+    except OSError as exc:
+        logger.error("runtime config のアクセス時にエラーが発生しました: %s", exc)
+        return {}
+    if isinstance(payload, dict):
+        return payload
+    logger.warning("runtime config の形式が不正です。空の設定として扱います。")
+    return {}
+
+
+def _save_runtime_config(data: Dict[str, Any]) -> None:
+    _ensure_data_dir()
+    with open(_RUNTIME_CONFIG_PATH, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, ensure_ascii=False, indent=2)
+
+
+def get_runtime_section(section: str) -> Dict[str, Any]:
+    """設定ファイル (data/config.json) から指定セクションを取得します。"""
+    payload = _load_runtime_config()
+    value = payload.get(section)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def set_runtime_section(section: str, values: Dict[str, Any]) -> Dict[str, Any]:
+    """設定ファイル (data/config.json) に指定セクションを書き込みます。"""
+    if not isinstance(values, dict):
+        raise ValueError("values must be a dict")
+    payload = _load_runtime_config()
+    payload[section] = dict(values)
+    _save_runtime_config(payload)
+    return dict(values)
 
 # Discordボットの設定
 
@@ -67,8 +117,6 @@ GUILD_ID = int(os.getenv('GUILD_ID_DEV' if ENV == 'development' else 'GUILD_ID_P
 
 # Birthday機能の設定
 BIRTHDAY_CHANNEL_ID = int(os.getenv('BIRTHDAY_CHANNEL_ID_DEV' if ENV == 'development' else 'BIRTHDAY_CHANNEL_ID_PROD', '0'))
-BIRTHDAY_ANNOUNCE_TIME_HOUR = int(os.getenv('BIRTHDAY_ANNOUNCE_TIME_HOUR', '9'))
-BIRTHDAY_ANNOUNCE_TIME_MINUTE = int(os.getenv('BIRTHDAY_ANNOUNCE_TIME_MINUTE', '0'))
 
 # Posterコマンド用の画像・フォント・チャンネル設定
 # アセットディレクトリのベースパス
@@ -87,18 +135,15 @@ POSTER_CHANNEL_ID = int(os.getenv('POSTER_CHANNEL_ID', '0'))
 
 # Quotes 機能の設定
 QUOTE_CHANNEL_ID = _safe_int(os.getenv('QUOTE_CHANNEL_ID_DEV' if ENV == 'development' else 'QUOTE_CHANNEL_ID_PROD', '0'), 0)
-QUOTE_POST_ENABLED = os.getenv('QUOTE_POST_ENABLED', 'true').lower() in {'true', '1', 'yes'}
-QUOTE_SCHEDULE_DAYS = max(1, _safe_int(os.getenv('QUOTE_SCHEDULE_DAYS', '1'), 1))
-QUOTE_SCHEDULE_HOUR = max(0, min(23, _safe_int(os.getenv('QUOTE_SCHEDULE_HOUR', '9'), 9)))
-QUOTE_SCHEDULE_MINUTE = max(0, min(59, _safe_int(os.getenv('QUOTE_SCHEDULE_MINUTE', '0'), 0)))
 
 # 機能の設定
 FEATURES = {
     "birthday": {
         "enabled": True,
         "settings": {
-            "notification_time": "09:00",
-            "timezone": "Asia/Tokyo"
+            "timezone": "Asia/Tokyo",
+            "default_enabled": True,
+            "default_hour": 9
         }
     },
     "oracle": {
@@ -122,11 +167,11 @@ FEATURES = {
     "quotes": {
         "enabled": True,
         "settings": {
-            "default_enabled": QUOTE_POST_ENABLED,
-            "days": QUOTE_SCHEDULE_DAYS,
-            "hour": QUOTE_SCHEDULE_HOUR,
-            "minute": QUOTE_SCHEDULE_MINUTE,
-            "channel_id": QUOTE_CHANNEL_ID
+            "default_enabled": True,
+            "default_days": 1,
+            "default_hour": 9,
+            "default_minute": 0,
+            "timezone": "Asia/Tokyo"
         }
     }
 }
@@ -158,16 +203,6 @@ def get_feature_settings(feature: str) -> Dict[str, Any]:
     """
     return FEATURES.get(feature, {}).get('settings', {})
 
-def get_birthday_announce_time():
-    """
-    誕生日通知の時刻を取得します。
-    
-    Returns:
-        datetime.time: 誕生日通知の時刻
-    """
-    import datetime
-    return datetime.time(hour=BIRTHDAY_ANNOUNCE_TIME_HOUR, minute=BIRTHDAY_ANNOUNCE_TIME_MINUTE)
-
 def get_birthday_channel_id() -> int:
     """
     誕生日通知チャンネルのIDを取得します。
@@ -179,5 +214,10 @@ def get_birthday_channel_id() -> int:
 
 
 def get_quote_channel_id() -> int:
-    """名言投稿チャンネルのIDを取得します。"""
+    """
+    名言投稿チャンネルのIDを取得します。
+
+    Returns:
+        int: 名言投稿チャンネルのID
+    """
     return QUOTE_CHANNEL_ID

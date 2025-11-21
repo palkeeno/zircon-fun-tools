@@ -16,13 +16,30 @@ import permissions
 import csv
 import urllib.request
 import io
+from typing import Any, Dict, Optional, Tuple
 from PIL import Image
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except ImportError:  # pragma: no cover
+    ZoneInfo = None  # type: ignore
+
 # ロギングの設定
 logger = logging.getLogger(__name__)
+
+_DEFAULT_TIMEZONE = "Asia/Tokyo"
+
+
+def _get_timezone() -> datetime.tzinfo:
+    if ZoneInfo is not None:
+        try:
+            return ZoneInfo(_DEFAULT_TIMEZONE)
+        except Exception:
+            logger.warning("ZoneInfoで %s を取得できません。UTC+09:00 を使用します", _DEFAULT_TIMEZONE)
+    return datetime.timezone(datetime.timedelta(hours=9))
 
 class BirthdayPaginationView(discord.ui.View):
     """誕生日一覧のページネーション用ビュー"""
@@ -102,11 +119,108 @@ class Birthday(commands.Cog):
             bot (commands.Bot): ボットのインスタンス
         """
         self.bot = bot
+        self.tz = _get_timezone()
         self.birthdays = []
+        self.defaults: Dict[str, Any] = self._feature_defaults()
+        self.settings: Dict[str, Any] = {}
         self.birthday_task_started = False
-        self.reported_flag_reset_task_started = False
         self.load_birthdays()
+        self._load_settings()
+        self._refresh_daily_flags(datetime.datetime.now(self.tz))
         logger.info("Birthday が初期化されました")
+
+    def _feature_defaults(self) -> Dict[str, Any]:
+        feature_settings = config.get_feature_settings("birthday")
+        default_enabled = feature_settings.get("default_enabled", True)
+        default_hour = feature_settings.get("default_hour", 9)
+        return {
+            "enabled": self._coerce_bool(default_enabled, True),
+            "hour": self._clamp_int(default_hour, 0, 23, 9),
+            "last_announced_date": None,
+            "last_reset_date": None,
+        }
+
+    @staticmethod
+    def _coerce_bool(value: Any, fallback: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return fallback
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"true", "1", "yes", "on"}:
+                return True
+            if lowered in {"false", "0", "no", "off"}:
+                return False
+            return fallback
+        try:
+            return bool(value)
+        except Exception:
+            return fallback
+
+    @staticmethod
+    def _clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:
+        try:
+            if value is None:
+                return fallback
+            number = int(value)
+        except (TypeError, ValueError):
+            return fallback
+        return max(minimum, min(maximum, number))
+
+    def _load_settings(self) -> None:
+        stored = config.get_runtime_section("birthday")
+        normalized = {
+            "enabled": self._coerce_bool(stored.get("enabled"), self.defaults["enabled"]),
+            "hour": self._clamp_int(stored.get("hour"), 0, 23, self.defaults["hour"]),
+            "last_announced_date": stored.get("last_announced_date") if isinstance(stored.get("last_announced_date"), str) else None,
+            "last_reset_date": stored.get("last_reset_date") if isinstance(stored.get("last_reset_date"), str) else None,
+        }
+        self.settings = normalized
+        self._persist_settings()
+
+    def _persist_settings(self) -> None:
+        try:
+            config.set_runtime_section("birthday", self.settings)
+        except Exception as exc:
+            logger.error("誕生日設定の保存に失敗しました: %s", exc, exc_info=True)
+
+    def _refresh_daily_flags(self, now: datetime.datetime) -> None:
+        today_str = now.date().isoformat()
+        if self.settings.get("last_reset_date") == today_str:
+            return
+        changed = False
+        for record in self.birthdays:
+            if record.get("reported"):
+                record["reported"] = False
+                changed = True
+        if changed:
+            self.save_birthdays()
+        self.settings["last_reset_date"] = today_str
+        self._persist_settings()
+
+    def _is_scheduled_time(self, now: datetime.datetime) -> bool:
+        target_hour = self._clamp_int(self.settings.get("hour"), 0, 23, self.defaults["hour"])
+        return now.hour == target_hour and now.minute == 0
+
+    def _get_member(self, interaction: discord.Interaction) -> Optional[discord.Member]:
+        if isinstance(interaction.user, discord.Member):
+            return interaction.user
+        if interaction.guild:
+            return interaction.guild.get_member(interaction.user.id)
+        return None
+
+    def _is_operator(self, interaction: discord.Interaction) -> bool:
+        return permissions.is_operator_member(self._get_member(interaction))
+
+    async def _ensure_operator(self, interaction: discord.Interaction) -> bool:
+        if self._is_operator(interaction):
+            return True
+        await interaction.response.send_message(
+            "このコマンドは運営のみ実行できます。",
+            ephemeral=True
+        )
+        return False
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -114,52 +228,74 @@ class Birthday(commands.Cog):
         if not self.birthday_task_started:
             self.birthday_task.start()
             self.birthday_task_started = True
-        if not self.reported_flag_reset_task_started:
-            self.reported_flag_reset_task.start()
-            self.reported_flag_reset_task_started = True
 
-    @tasks.loop(hours=24)
+    @tasks.loop(minutes=1)
     async def birthday_task(self):
-        """毎日誕生日をチェックして通知するタスク"""
-        now = datetime.datetime.now()
-        today_month = now.month
-        today_day = now.day
-        
-        # 今日誕生日の人を抽出
-        today_birthdays = [b for b in self.birthdays if b["month"] == today_month and b["day"] == today_day]
-        if not today_birthdays:
-            return
+        """スケジュールされた時刻に誕生日をチェックして通知するタスク"""
         try:
-            channel_id = config.get_birthday_channel_id()
-            if not channel_id:
-                logger.warning("誕生日チャンネルIDが設定されていません")
+            now = datetime.datetime.now(self.tz)
+            self._refresh_daily_flags(now)
+
+            if not self.settings.get("enabled", True):
                 return
-            channel = self.bot.get_channel(channel_id)
-            if channel is None:
-                logger.error(f"誕生日チャンネルが見つかりません: {channel_id}")
+
+            if not self._is_scheduled_time(now):
                 return
-            # 報告済みでない人のみアナウンス
-            unreported_birthdays = [b for b in today_birthdays if not b.get("reported", False)]
-            if not unreported_birthdays:
+
+            today_str = now.date().isoformat()
+            if self.settings.get("last_announced_date") == today_str:
                 return
-            # 同じ日付の別キャラもまとめず、1人ずつ個別に発表
-            # ただし、同じcharacter_id・同じ日付が複数ある場合はスキップ
-            unique = {}
-            for b in unreported_birthdays:
-                key = (b.get("character_id"), b["month"], b["day"])
-                if key not in unique:
-                    unique[key] = [b]
-                else:
-                    unique[key].append(b)
-            for key, items in unique.items():
-                if len(items) == 1:
-                    b = items[0]
-                    await self._announce_zircon_birthday(channel, b)
-                    b["reported"] = True
-            self.save_birthdays()
+
+            announced = await self._announce_today_birthdays(now)
+            if announced:
+                self.settings["last_announced_date"] = today_str
+                self._persist_settings()
         except Exception as e:
             logger.error(f"Error in birthday_task: {e}")
             logger.error(traceback.format_exc())
+
+    async def _announce_today_birthdays(self, now: datetime.datetime) -> bool:
+        today_month = now.month
+        today_day = now.day
+        today_birthdays = [b for b in self.birthdays if b.get("month") == today_month and b.get("day") == today_day]
+        if not today_birthdays:
+            return False
+
+        channel_id = config.get_birthday_channel_id()
+        if not channel_id:
+            logger.warning("誕生日チャンネルIDが設定されていません")
+            return False
+
+        channel = self.bot.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(channel_id)  # type: ignore[attr-defined]
+            except Exception:
+                logger.error(f"誕生日チャンネルが見つかりません: {channel_id}")
+                return False
+
+        unreported_birthdays = [b for b in today_birthdays if not b.get("reported", False)]
+        if not unreported_birthdays:
+            return False
+
+        unique: Dict[Tuple[Optional[str], int, int], list] = {}
+        for record in unreported_birthdays:
+            key = (record.get("character_id"), record.get("month"), record.get("day"))
+            unique.setdefault(key, []).append(record)
+
+        announced_any = False
+        for grouped_records in unique.values():
+            if len(grouped_records) != 1:
+                continue
+            birthday_record = grouped_records[0]
+            await self._announce_zircon_birthday(channel, birthday_record)
+            birthday_record["reported"] = True
+            announced_any = True
+
+        if announced_any:
+            self.save_birthdays()
+
+        return announced_any
 
     async def _announce_zircon_birthday(self, channel, birthday_data):
         """Zirconキャラクターの誕生日を発表"""
@@ -208,24 +344,6 @@ class Birthday(commands.Cog):
         except Exception as e:
             logger.error(f"Error in _announce_zircon_birthday: {e}")
             logger.error(traceback.format_exc())
-
-    @tasks.loop(hours=24)
-    async def reported_flag_reset_task(self):
-        """毎日9時に報告済みフラグをリセットするタスク"""
-        now = datetime.datetime.now()
-        # 9時以降のみ実行
-        if now.hour < 9:
-            return
-        today_month = now.month
-        today_day = now.day
-        changed = False
-        for b in self.birthdays:
-            # 今日以外の誕生日はフラグを外す
-            if b.get("reported", False) and not (b["month"] == today_month and b["day"] == today_day):
-                b["reported"] = False
-                changed = True
-        if changed:
-            self.save_birthdays()
 
     def load_birthdays(self):
         """誕生日データを読み込みます（リスト形式）。dataフォルダがなければ作成。"""
@@ -398,6 +516,118 @@ class Birthday(commands.Cog):
             )
 
     @app_commands.command(
+        name="birthday_edit",
+        description="登録済みの誕生日情報を編集します"
+    )
+    @app_commands.describe(
+        id="編集したいキャラクターID",
+        month="新しい月（1-12）",
+        date="新しい日（1-31）",
+        name="新しいキャラクター名（省略可）"
+    )
+    async def birthday_edit(
+        self,
+        interaction: discord.Interaction,
+        id: str,
+        month: Optional[int] = None,
+        date: Optional[int] = None,
+        name: Optional[str] = None,
+    ) -> None:
+        """登録済みの誕生日エントリを更新します。
+
+        Args:
+            interaction: Discordインタラクションのコンテキスト。
+            id: 編集対象のキャラクターID。
+            month: 新しい誕生日の月。省略時は変更しません。
+            date: 新しい誕生日の日。省略時は変更しません。
+            name: 新しいキャラクター名。省略時は変更しません。
+        """
+        if not permissions.can_run_command(interaction, 'birthday_edit'):
+            await interaction.response.send_message(
+                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
+                ephemeral=True
+            )
+            return
+
+        has_update_target = any(v is not None for v in (month, date, name))
+        if not has_update_target:
+            await interaction.response.send_message(
+                "更新する項目を最低1つ指定してください。",
+                ephemeral=True
+            )
+            return
+
+        if month is not None and not (1 <= month <= 12):
+            await interaction.response.send_message(
+                "無効な月です。1-12の範囲で指定してください。",
+                ephemeral=True
+            )
+            return
+
+        if date is not None and not (1 <= date <= 31):
+            await interaction.response.send_message(
+                "無効な日です。1-31の範囲で指定してください。",
+                ephemeral=True
+            )
+            return
+
+        target = next((b for b in self.birthdays if b.get("character_id") == id), None)
+        if target is None:
+            await interaction.response.send_message(
+                f"キャラクターID `{id}` の誕生日は登録されていません。",
+                ephemeral=True
+            )
+            return
+
+        changes = []
+        requires_sort = False
+        reset_reported = False
+
+        if month is not None and month != target.get("month"):
+            target["month"] = month
+            changes.append(f"月を {month} に更新")
+            requires_sort = True
+            reset_reported = True
+
+        if date is not None and date != target.get("day"):
+            target["day"] = date
+            changes.append(f"日を {date} に更新")
+            requires_sort = True
+            reset_reported = True
+
+        if name is not None:
+            trimmed_name = name.strip()
+            if not trimmed_name:
+                await interaction.response.send_message(
+                    "名前が空白です。正しい名前を指定してください。",
+                    ephemeral=True
+                )
+                return
+            if trimmed_name != target.get("name"):
+                target["name"] = trimmed_name
+                changes.append("名前を更新")
+
+        if not changes:
+            await interaction.response.send_message(
+                "指定された値は既存の登録内容と同じです。変更は行われませんでした。",
+                ephemeral=True
+            )
+            return
+
+        if reset_reported:
+            target["reported"] = False
+
+        if requires_sort:
+            self.birthdays.sort(key=lambda x: (x["month"], x["day"]))
+
+        self.save_birthdays()
+
+        await interaction.response.send_message(
+            f"{target.get('name', '不明')} (#{target.get('character_id', '???')}) の誕生日情報を更新しました：" + ", ".join(changes),
+            ephemeral=True
+        )
+
+    @app_commands.command(
         name="birthday_list",
         description="登録されている誕生日の一覧を表示します"
     )
@@ -545,6 +775,51 @@ class Birthday(commands.Cog):
                 "エラーが発生しました。もう一度お試しください。",
                 ephemeral=True
             )
+
+    @app_commands.command(
+        name="birthday_toggle",
+        description="誕生日の自動投稿をON/OFFします"
+    )
+    @app_commands.describe(enabled="true で有効化、false で無効化")
+    async def birthday_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
+        """誕生日の自動投稿機能を運営が切り替えるコマンド."""
+        if not await self._ensure_operator(interaction):
+            return
+
+        self.settings["enabled"] = bool(enabled)
+        if enabled:
+            # 再有効化と同時に当日の投稿状況をリセット
+            self.settings["last_announced_date"] = None
+        self._persist_settings()
+        status = "有効" if enabled else "無効"
+        await interaction.response.send_message(
+            f"誕生日の自動投稿を{status}にしました。",
+            ephemeral=True,
+        )
+
+    @app_commands.command(
+        name="birthday_schedule",
+        description="誕生日の自動投稿時刻を設定します (時のみ指定)"
+    )
+    @app_commands.describe(hour="自動投稿する時刻 (0-23)")
+    async def birthday_schedule(self, interaction: discord.Interaction, hour: int) -> None:
+        """誕生日の自動投稿時刻を設定する運営向けコマンド."""
+        if not await self._ensure_operator(interaction):
+            return
+
+        if hour < 0 or hour > 23:
+            await interaction.response.send_message(
+                "時刻は0-23の範囲で指定してください。",
+                ephemeral=True,
+            )
+            return
+
+        self.settings["hour"] = hour
+        self._persist_settings()
+        await interaction.response.send_message(
+            f"誕生日の自動投稿時刻を {hour:02d}:00 に設定しました。",
+            ephemeral=True,
+        )
 
     @app_commands.command(
         name="birthday_import",

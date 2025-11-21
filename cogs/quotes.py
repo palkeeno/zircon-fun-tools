@@ -11,7 +11,7 @@ import logging
 import os
 import random
 import uuid
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import discord
 from discord import app_commands
@@ -57,32 +57,105 @@ class Quotes(commands.Cog):
         self.data_path = data_path or _DEFAULT_DATA_PATH
         self._data_lock = asyncio.Lock()
         self.quotes: List[Dict] = []
-        self.settings: Dict[str, Optional[str]] = {}
+        self.settings: Dict[str, Any] = {}
         self._task_started = False
         self._load_data()
+        self.settings = self._load_settings()
         logger.info("Quotes が初期化されました")
 
     @property
-    def _default_settings(self) -> Dict[str, Optional[str]]:
+    def _default_settings(self) -> Dict[str, Any]:
         """Return default settings derived from config."""
+        feature_settings = config.get_feature_settings("quotes")
         return {
-            "enabled": config.QUOTE_POST_ENABLED,
-            "days": config.QUOTE_SCHEDULE_DAYS,
-            "hour": config.QUOTE_SCHEDULE_HOUR,
-            "minute": config.QUOTE_SCHEDULE_MINUTE,
+            "enabled": self._coerce_bool(feature_settings.get("default_enabled"), True),
+            "days": self._coerce_int(feature_settings.get("default_days"), 1, minimum=1),
+            "hour": self._coerce_int(feature_settings.get("default_hour"), 9, minimum=0, maximum=23),
+            "minute": self._coerce_int(feature_settings.get("default_minute"), 0, minimum=0, maximum=59),
             "last_posted_at": None,
             "last_posted_quote_id": None,
         }
+
+    @staticmethod
+    def _coerce_bool(value: Any, fallback: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return fallback
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"true", "1", "yes", "on"}:
+                return True
+            if lowered in {"false", "0", "no", "off"}:
+                return False
+            return fallback
+        try:
+            return bool(value)
+        except Exception:
+            return fallback
+
+    @staticmethod
+    def _coerce_int(value: Any, fallback: int, *, minimum: int, maximum: Optional[int] = None) -> int:
+        try:
+            if value is None:
+                raise TypeError
+            number = int(value)
+        except (TypeError, ValueError):
+            number = fallback
+        number = max(minimum, number)
+        if maximum is not None:
+            number = min(maximum, number)
+        return number
+
+    def _normalize_settings(self, raw: Dict[str, Any]) -> Dict[str, Any]:
+        defaults = self._default_settings
+        return {
+            "enabled": self._coerce_bool(raw.get("enabled"), defaults["enabled"]),
+            "days": self._coerce_int(raw.get("days"), defaults["days"], minimum=1),
+            "hour": self._coerce_int(raw.get("hour"), defaults["hour"], minimum=0, maximum=23),
+            "minute": self._coerce_int(raw.get("minute"), defaults["minute"], minimum=0, maximum=59),
+            "last_posted_at": raw.get("last_posted_at") if isinstance(raw.get("last_posted_at"), str) else None,
+            "last_posted_quote_id": raw.get("last_posted_quote_id") if raw.get("last_posted_quote_id") else None,
+        }
+
+    def _load_settings(self) -> Dict[str, Any]:
+        stored = config.get_runtime_section("quotes")
+        normalized = self._normalize_settings(stored)
+        self._persist_settings(normalized)
+        return normalized
+
+    def _persist_settings(self, values: Optional[Dict[str, Any]] = None) -> None:
+        payload = values if values is not None else self.settings
+        try:
+            config.set_runtime_section("quotes", payload)
+        except Exception as exc:
+            logger.error("名言設定の保存に失敗しました: %s", exc, exc_info=True)
+
+    def _get_member(self, interaction: discord.Interaction) -> Optional[discord.Member]:
+        if isinstance(interaction.user, discord.Member):
+            return interaction.user
+        if interaction.guild is not None:
+            return interaction.guild.get_member(interaction.user.id)
+        return None
+
+    def _is_operator(self, interaction: discord.Interaction) -> bool:
+        return permissions.is_operator_member(self._get_member(interaction))
+
+    async def _ensure_operator(self, interaction: discord.Interaction) -> bool:
+        if self._is_operator(interaction):
+            return True
+        await interaction.response.send_message("このコマンドは運営のみ実行できます。", ephemeral=True)
+        return False
 
     def _ensure_data_dir(self) -> None:
         os.makedirs(os.path.dirname(self.data_path) or ".", exist_ok=True)
 
     def _load_data(self) -> None:
-        """Load quotes and settings from disk."""
+        """Load quotes from disk."""
         self._ensure_data_dir()
+
         if not os.path.exists(self.data_path):
             self.quotes = []
-            self.settings = self._default_settings
             self._save_data()
             return
 
@@ -98,46 +171,17 @@ class Quotes(commands.Cog):
         if isinstance(payload, list):
             # 旧形式との互換性維持
             self.quotes = payload
-            self.settings = self._default_settings
             self._save_data()
             return
 
-        self.quotes = payload.get("quotes", []) if isinstance(payload, dict) else []
-        self.settings = self._default_settings
         if isinstance(payload, dict):
-            incoming_settings = payload.get("settings", {})
-            if isinstance(incoming_settings, dict):
-                enabled_val = incoming_settings.get("enabled", self.settings["enabled"])
-                if isinstance(enabled_val, str):
-                    enabled_parsed = enabled_val.lower() in {"true", "1", "yes"}
-                else:
-                    enabled_parsed = bool(enabled_val)
+            self.quotes = payload.get("quotes", [])
+        else:
+            self.quotes = []
 
-                def _coerce_int(value: Optional[object], default: int, minimum: int, maximum: Optional[int] = None) -> int:
-                    try:
-                        candidate = int(value) if value is not None else default
-                    except (TypeError, ValueError):
-                        candidate = default
-                    if maximum is not None:
-                        return max(minimum, min(maximum, candidate))
-                    return max(minimum, candidate)
-
-                days_val = incoming_settings.get("days")
-                hour_val = incoming_settings.get("hour")
-                minute_val = incoming_settings.get("minute")
-
-                updated = {
-                    "enabled": enabled_parsed,
-                    "days": _coerce_int(days_val, self.settings["days"], minimum=1),
-                    "hour": _coerce_int(hour_val, self.settings["hour"], minimum=0, maximum=23),
-                    "minute": _coerce_int(minute_val, self.settings["minute"], minimum=0, maximum=59),
-                    "last_posted_at": incoming_settings.get("last_posted_at"),
-                    "last_posted_quote_id": incoming_settings.get("last_posted_quote_id"),
-                }
-                self.settings.update(updated)
-        # データ整形
         if not isinstance(self.quotes, list):
             self.quotes = []
+
         for quote in self.quotes:
             if not isinstance(quote, dict):
                 continue
@@ -147,11 +191,10 @@ class Quotes(commands.Cog):
             quote.setdefault("character_id", None)
 
     def _save_data(self) -> None:
-        """Persist quotes and settings to disk."""
+        """Persist quotes to disk."""
         self._ensure_data_dir()
         payload = {
             "quotes": self.quotes,
-            "settings": self.settings,
         }
         with open(self.data_path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
@@ -259,7 +302,7 @@ class Quotes(commands.Cog):
         async with self._data_lock:
             self.settings["last_posted_at"] = _now(self.tz).isoformat()
             self.settings["last_posted_quote_id"] = quote.get("id")
-            self._save_data()
+            self._persist_settings()
 
     @tasks.loop(minutes=1)
     async def quote_posting_loop(self) -> None:
@@ -451,15 +494,24 @@ class Quotes(commands.Cog):
             removed = self.quotes.pop(index)
             self._save_data()
 
+        speaker = removed.get("speaker", "不明")
+        truncated_text = removed.get("text", "").replace("\n", " ")
+        if len(truncated_text) > 100:
+            truncated_text = truncated_text[:97] + "..."
+        message = (
+            f"🗑️ {interaction.user.mention} が名言を削除しました\n"
+            f"ID: `{quote_id}` / 発言者: {speaker}\n"
+            f"本文: {truncated_text}"
+        )
         await interaction.response.send_message(
-            f"名言を削除しました: {removed.get('speaker', '不明')} (ID: {quote_id})", ephemeral=True
+            message,
+            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
         )
 
     @app_commands.command(name="quote_import", description="CSVから名言を一括登録します")
     @app_commands.describe(file="speaker,text[,character_id] の形式のCSVファイル")
     async def quote_import(self, interaction: discord.Interaction, file: discord.Attachment) -> None:
-        if not permissions.can_run_command(interaction, 'quote_import'):
-            await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
+        if not await self._ensure_operator(interaction):
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -538,13 +590,12 @@ class Quotes(commands.Cog):
     @app_commands.command(name="quote_toggle", description="名言の定期投稿をON/OFFします")
     @app_commands.describe(enabled="true で有効化、false で無効化")
     async def quote_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
-        if not permissions.can_run_command(interaction, 'quote_toggle'):
-            await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
+        if not await self._ensure_operator(interaction):
             return
 
         async with self._data_lock:
             self.settings["enabled"] = bool(enabled)
-            self._save_data()
+            self._persist_settings()
         state = "有効" if enabled else "無効"
         await interaction.response.send_message(f"名言の定期投稿を{state}にしました。", ephemeral=True)
 
@@ -555,8 +606,7 @@ class Quotes(commands.Cog):
         minute="投稿時刻 (0-59)",
     )
     async def quote_schedule(self, interaction: discord.Interaction, days: int, hour: int, minute: int) -> None:
-        if not permissions.can_run_command(interaction, 'quote_schedule'):
-            await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
+        if not await self._ensure_operator(interaction):
             return
 
         if days < 1 or not (0 <= hour <= 23) or not (0 <= minute <= 59):
@@ -568,7 +618,7 @@ class Quotes(commands.Cog):
             self.settings["hour"] = hour
             self.settings["minute"] = minute
             self.settings["last_posted_at"] = None
-            self._save_data()
+            self._persist_settings()
 
         await interaction.response.send_message(
             f"投稿スケジュールを {days}日おき {hour:02d}:{minute:02d} に設定しました。", ephemeral=True

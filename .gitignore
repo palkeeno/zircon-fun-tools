@@ -40,6 +40,8 @@ Thumbs.db
 # saved data
 data/overrides.json
 data/birthdays.json
+data/quotes.json
+data/config.json
 
 # Poster Assets (large image files)
 data/assets/*.png

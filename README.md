@@ -2,6 +2,13 @@
 
 Discordサーバーで遊べる様々なゲームや娯楽機能を提供するボットです。
 
+## 設定管理ポリシー
+
+- `.env` で定義する内容は環境依存の設定（トークンやチャンネルIDなど）です。
+- 環境に依存しない静的な既定値は `config.py` の `FEATURES` で管理します。
+- 運営コマンドで変更される設定のうち、権限付与/剥奪に関する情報は `data/overrides.json` に保存します。
+- それ以外の運営コマンドで可変となる各種設定（定期投稿のオン/オフや投稿時刻など）は `data/config.json` に保存し、ボット再起動後も保持します。
+
 ## 機能一覧
 
 ### 1. 誕生日管理 (`/birthday_*`)
@@ -13,9 +20,13 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 - `/birthday_add id:<キャラID> month:<月> date:<日>` - 誕生日を登録（運営のみ）
 - `/birthday_delete id:<キャラID>` - 誕生日を削除（運営のみ）
 - `/birthday_import file:<CSVファイル>` - CSV形式で一括インポート（運営のみ）
+- `/birthday_toggle enabled:<true|false>` - 誕生日自動投稿のON/OFF切替（運営のみ・権限付与不可）
+- `/birthday_schedule hour:<時>` - 誕生日自動投稿の時刻を設定（運営のみ・権限付与不可）
 
 **自動通知:**
-- 毎日設定された時刻（デフォルト9:00 JST）に自動でお祝いメッセージを投稿
+- 毎日設定された時刻（デフォルト: 9:00 JST）に自動でお祝いメッセージを投稿
+- 時刻・有効/無効の設定はコマンドで変更でき、永続化されます
+- 設定内容は `data/config.json` に保存され、ボット再起動後も維持されます
 
 ### 2. 占い機能 (`/oracle`)
 複数の選択肢から1つをランダムに選んでアドバイスします。
@@ -78,10 +89,10 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 - `/quote_search keyword:<キーワード>` – 発言者名または名言本文からキーワード検索
 - `/quote_add speaker:<発言者名> text:<名言本文> [character_id:<キャラクターID>]` – 名言を1件登録（character_idは任意）
 - `/quote_edit quote_id:<名言ID> [speaker:<発言者名>] [text:<名言本文>] [character_id:<キャラクターID>]` – 名言情報を編集（運営のみ）
-- `/quote_delete quote_id:<名言ID>` – 名言を削除（運営のみ）
-- `/quote_import file:<CSVファイル>` – 名言を一括登録（CSV）（運営のみ）
-- `/quote_toggle enabled:<true|false>` – 定期投稿のON/OFF切替（運営のみ）
-- `/quote_schedule days:<日数> hour:<時> minute:<分>` – 定期投稿のスケジュールを設定（例: days=1, hour=9, minute=0 で毎日9:00）（運営のみ）
+- `/quote_delete quote_id:<名言ID>` – 名言を削除（運営のみ、実行メッセージは公開）
+- `/quote_import file:<CSVファイル>` – 名言を一括登録（CSV）（運営のみ・権限付与不可）
+- `/quote_toggle enabled:<true|false>` – 定期投稿のON/OFF切替（運営のみ・権限付与不可）
+- `/quote_schedule days:<日数> hour:<時> minute:<分>` – 定期投稿のスケジュールを設定（例: days=1, hour=9, minute=0 で毎日9:00）（運営のみ・権限付与不可）
 
 **名言IDの確認方法:**
 - `/quote_list` で一覧表示時に各名言のIDが表示されます
@@ -101,7 +112,9 @@ speaker,text[,character_id]
 - `character_id` は任意（指定するとサムネイルと公式ページURLが設定される）
 
 権限:
-- 追加/編集/削除/インポート/設定系（toggle, schedule）は運営ロール、または `permissions.can_run_command()` により許可されたロールのみ
+- `/quote_toggle` `/quote_schedule` `/quote_import` は運営ロールのみ実行可能（ロール付与による許可は不可）
+- `/quote_add` `/quote_edit` `/quote_delete` は運営ロール、または `permissions.can_run_command()` により許可されたロールのみ
+- `/quote_delete` の実行結果は公開メッセージとして残り、実行者を記録します
 - 通常の閲覧や投稿はボットが自動で行います
 
 データ保存:
@@ -123,7 +136,7 @@ speaker,text[,character_id]
 - 既定では `days=1, hour=9, minute=0`（毎日9:00）に `QUOTE_CHANNEL_ID_*` へランダムな1件を投稿
 - 同一名言の連続投稿は避ける（直前投稿の再選出をスキップ）
 - キャラクターIDが登録されている場合のみ、既存 `cogs/poster.py` と同様のロジックで画像取得（公式ページのスクレイピング + 画像は GCS の pfp_*）
-- 設定はコマンドで変更可（オン/オフ、スケジュール）し、永続化
+- 設定はコマンドで変更可（オン/オフ、スケジュール）し、`data/config.json` に永続化
 
 ## セットアップ
 
@@ -221,9 +234,8 @@ ADMIN_CHANNEL_ID_PROD=0
 BIRTHDAY_CHANNEL_ID_DEV=your_birthday_channel_id_here
 BIRTHDAY_CHANNEL_ID_PROD=0
 
-# 通知時刻（24時間形式）
-BIRTHDAY_ANNOUNCE_TIME_HOUR=9
-BIRTHDAY_ANNOUNCE_TIME_MINUTE=0
+# 通知設定はボット内の設定ファイル（data/config.json）で管理されます
+# 初期値は「有効・毎日9:00 JST」。コマンドで変更すると自動的に保存されます
 
 # ========================================
 # 名言機能の設定（オプション）
@@ -232,11 +244,7 @@ BIRTHDAY_ANNOUNCE_TIME_MINUTE=0
 QUOTE_CHANNEL_ID_DEV=your_quote_channel_id_here
 QUOTE_CHANNEL_ID_PROD=0
 
-# 名言定期投稿の有効/無効（コマンドで変更可能、ここは初期値）
-QUOTE_POST_ENABLED=true
-
-# 投稿間隔（分） 例: 1440=1日
-QUOTE_POST_INTERVAL_MINUTES=1440
+# 名言の定期投稿スケジュールは data/config.json に保存されます（初期値: 有効・1日おき 9:00）
 
 # ========================================
 # ポスター機能の設定（オプション）
@@ -265,7 +273,8 @@ POSTER_CHANNEL_ID=0
 
 `data/` ディレクトリが自動作成されます。以下のファイルが使用されます：
 - `data/birthdays.json` - 誕生日データ（自動生成）
-- `data/overrides.json` - 誕生日のオーバーライドデータ（自動生成）
+- `data/config.json` - 各アプリの設定（自動生成）
+- `data/overrides.json` - 権限オーバーライドデータ（自動生成）
 - `data/quotes.json` - 名言データ（自動生成）
 - `data/assets/` - ポスター機能用の画像アセット（手動配置）
 
