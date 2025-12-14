@@ -12,7 +12,7 @@ import traceback
 import datetime
 import os
 import config
-import permissions
+
 import csv
 import urllib.request
 import io
@@ -210,17 +210,7 @@ class Birthday(commands.Cog):
             return interaction.guild.get_member(interaction.user.id)
         return None
 
-    def _is_operator(self, interaction: discord.Interaction) -> bool:
-        return permissions.is_operator_member(self._get_member(interaction))
 
-    async def _ensure_operator(self, interaction: discord.Interaction) -> bool:
-        if self._is_operator(interaction):
-            return True
-        await interaction.response.send_message(
-            "このコマンドは運営のみ実行できます。",
-            ephemeral=True
-        )
-        return False
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -386,13 +376,7 @@ class Birthday(commands.Cog):
             interaction (discord.Interaction): インタラクション
             id (str): 削除したいキャラクターID
         """
-        # 権限チェック
-        if not permissions.can_run_command(interaction, 'birthday_delete'):
-            await interaction.response.send_message(
-                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
-                ephemeral=True
-            )
-            return
+
 
         try:
             # 該当するキャラクターを検索
@@ -442,13 +426,7 @@ class Birthday(commands.Cog):
             month (int): 月
             date (int): 日
         """
-        # 権限チェック
-        if not permissions.can_run_command(interaction, 'birthday_add'):
-            await interaction.response.send_message(
-                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
-                ephemeral=True
-            )
-            return
+
 
         try:
             await interaction.response.defer(ephemeral=True)
@@ -542,12 +520,7 @@ class Birthday(commands.Cog):
             date: 新しい誕生日の日。省略時は変更しません。
             name: 新しいキャラクター名。省略時は変更しません。
         """
-        if not permissions.can_run_command(interaction, 'birthday_edit'):
-            await interaction.response.send_message(
-                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
-                ephemeral=True
-            )
-            return
+
 
         has_update_target = any(v is not None for v in (month, date, name))
         if not has_update_target:
@@ -638,13 +611,7 @@ class Birthday(commands.Cog):
         Args:
             interaction (discord.Interaction): インタラクション
         """
-        # 権限チェック
-        if not permissions.can_run_command(interaction, 'birthday_list'):
-            await interaction.response.send_message(
-                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
-                ephemeral=True
-            )
-            return
+
 
         try:
             if not self.birthdays:
@@ -710,13 +677,7 @@ class Birthday(commands.Cog):
             interaction (discord.Interaction): インタラクション
             id_or_name (str): キャラクターIDまたは名前
         """
-        # 権限チェック
-        if not permissions.can_run_command(interaction, 'birthday_search'):
-            await interaction.response.send_message(
-                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
-                ephemeral=True
-            )
-            return
+
 
         try:
             # IDまたは名前で検索（部分一致）
@@ -783,8 +744,7 @@ class Birthday(commands.Cog):
     @app_commands.describe(enabled="true で有効化、false で無効化")
     async def birthday_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
         """誕生日の自動投稿機能を運営が切り替えるコマンド."""
-        if not await self._ensure_operator(interaction):
-            return
+
 
         self.settings["enabled"] = bool(enabled)
         if enabled:

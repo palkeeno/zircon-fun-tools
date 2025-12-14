@@ -23,9 +23,20 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-import permissions
+import config
+
 
 logger = logging.getLogger(__name__)
+
+
+
+def is_operator_member(member: Optional[discord.Member]) -> bool:
+    if not config.OPERATOR_ROLE_ID or not member:
+        return False
+    try:
+        return any(r.id == config.OPERATOR_ROLE_ID for r in getattr(member, "roles", []))
+    except Exception:
+        return False
 
 
 class ShowResultsView(discord.ui.View):
@@ -48,7 +59,7 @@ class ShowResultsView(discord.ui.View):
         else:
             member = None
 
-        if not permissions.is_operator_member(member) and interaction.user.id != self.operator_id:
+        if not is_operator_member(member) and interaction.user.id != self.operator_id:
             await interaction.response.send_message(
                 "このボタンは管理者のみ使用できます。",
                 ephemeral=True
@@ -71,7 +82,7 @@ class ShowResultsView(discord.ui.View):
         else:
             member = None
 
-        if not permissions.is_operator_member(member) and interaction.user.id != self.operator_id:
+        if not is_operator_member(member) and interaction.user.id != self.operator_id:
             await interaction.response.send_message(
                 "このボタンは管理者のみ使用できます。",
                 ephemeral=True
@@ -103,7 +114,7 @@ class NextLotteryView(discord.ui.View):
         else:
             member = None
 
-        if not permissions.is_operator_member(member) and interaction.user.id != self.operator_id:
+        if not is_operator_member(member) and interaction.user.id != self.operator_id:
             await interaction.response.send_message(
                 "このボタンは管理者のみ使用できます。",
                 ephemeral=True
@@ -127,7 +138,7 @@ class NextLotteryView(discord.ui.View):
         else:
             member = None
 
-        if not permissions.is_operator_member(member) and interaction.user.id != self.operator_id:
+        if not is_operator_member(member) and interaction.user.id != self.operator_id:
             await interaction.response.send_message(
                 "このボタンは管理者のみ使用できます。",
                 ephemeral=True
@@ -157,7 +168,7 @@ class Lottery(commands.Cog):
             member = interaction.guild.get_member(interaction.user.id)
         else:
             member = None
-        return permissions.is_operator_member(member)
+        return is_operator_member(member)
 
     @app_commands.command(name="lottery", description="指定ロールから人数分を抽選して順に発表します")
     @app_commands.describe(
@@ -170,17 +181,12 @@ class Lottery(commands.Cog):
         role: discord.Role,
         count: int,
     ):
-        # 権限: 管理者は常にOK、非管理者は限定解除されたロールのみ
-        if not permissions.can_run_command(interaction, 'lottery'):
-            await interaction.response.send_message(
-                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
-                ephemeral=True)
-            return
 
         if count < 1:
+
             await interaction.response.send_message("抽選人数は1以上で指定してください。", ephemeral=True)
             return
-
+  
         # 集合作成（ボット除外）。指定ロールを持つ全員が対象。
         members = [m for m in role.members if not m.bot]
         if len(members) < count:

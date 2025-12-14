@@ -10,7 +10,7 @@ import random
 import asyncio
 import logging
 import traceback
-import permissions
+
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
@@ -40,13 +40,7 @@ class Oracle(commands.Cog):
             choices (int): 選択肢の数
         """
         try:
-            # 権限チェック: 管理者は常にOK、非管理者は限定解除されたロールのみ
-            if not permissions.can_run_command(interaction, 'oracle'):
-                await interaction.response.send_message(
-                    "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
-                    ephemeral=True
-                )
-                return
+
 
             # 選択肢の数のバリデーション
             if choices < 1:

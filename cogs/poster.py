@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 import logging
 import traceback
 import config
-import permissions
+
 import os
 import io
 
@@ -564,13 +564,7 @@ class Poster(commands.Cog):
         character_id="キャラクターIDを入力してください"
     )
     async def poster(self, interaction: discord.Interaction, character_id: str):
-        # 権限チェック
-        if not permissions.can_run_command(interaction, 'poster'):
-            await interaction.response.send_message(
-                "このコマンドを実行する権限がありません。管理者にお問い合わせください。",
-                ephemeral=True
-            )
-            return
+
         # 画像アセットの存在確認（マスクと国旗はオプション）
         # 現在は必須アセットなし（すべてオプション）
         optional_assets = [

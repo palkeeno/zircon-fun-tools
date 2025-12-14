@@ -18,7 +18,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 import config
-import permissions
+
 
 try:
     from zoneinfo import ZoneInfo  # Python 3.9+
@@ -138,14 +138,7 @@ class Quotes(commands.Cog):
             return interaction.guild.get_member(interaction.user.id)
         return None
 
-    def _is_operator(self, interaction: discord.Interaction) -> bool:
-        return permissions.is_operator_member(self._get_member(interaction))
 
-    async def _ensure_operator(self, interaction: discord.Interaction) -> bool:
-        if self._is_operator(interaction):
-            return True
-        await interaction.response.send_message("このコマンドは運営のみ実行できます。", ephemeral=True)
-        return False
 
     def _ensure_data_dir(self) -> None:
         os.makedirs(os.path.dirname(self.data_path) or ".", exist_ok=True)
@@ -402,9 +395,7 @@ class Quotes(commands.Cog):
         character_id="関連するキャラクターID (任意)",
     )
     async def quote_add(self, interaction: discord.Interaction, speaker: str, text: str, character_id: Optional[str] = None) -> None:
-        if not permissions.can_run_command(interaction, 'quote_add'):
-            await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
-            return
+
 
         speaker = speaker.strip()
         text = text.strip()
@@ -449,9 +440,7 @@ class Quotes(commands.Cog):
         text: Optional[str] = None,
         character_id: Optional[str] = None,
     ) -> None:
-        if not permissions.can_run_command(interaction, 'quote_edit'):
-            await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
-            return
+
 
         if speaker is None and text is None and character_id is None:
             await interaction.response.send_message("更新する項目を少なくとも1つ指定してください。", ephemeral=True)
@@ -482,9 +471,7 @@ class Quotes(commands.Cog):
     @app_commands.command(name="quote_delete", description="名言を削除します")
     @app_commands.describe(quote_id="削除する名言ID")
     async def quote_delete(self, interaction: discord.Interaction, quote_id: str) -> None:
-        if not permissions.can_run_command(interaction, 'quote_delete'):
-            await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
-            return
+
 
         async with self._data_lock:
             index = next((i for i, q in enumerate(self.quotes) if q.get("id") == quote_id), None)
@@ -511,8 +498,7 @@ class Quotes(commands.Cog):
     @app_commands.command(name="quote_import", description="CSVから名言を一括登録します")
     @app_commands.describe(file="speaker,text[,character_id] の形式のCSVファイル")
     async def quote_import(self, interaction: discord.Interaction, file: discord.Attachment) -> None:
-        if not await self._ensure_operator(interaction):
-            return
+
 
         await interaction.response.defer(ephemeral=True)
 
@@ -590,8 +576,7 @@ class Quotes(commands.Cog):
     @app_commands.command(name="quote_toggle", description="名言の定期投稿をON/OFFします")
     @app_commands.describe(enabled="true で有効化、false で無効化")
     async def quote_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
-        if not await self._ensure_operator(interaction):
-            return
+
 
         async with self._data_lock:
             self.settings["enabled"] = bool(enabled)
@@ -606,8 +591,7 @@ class Quotes(commands.Cog):
         minute="投稿時刻 (0-59)",
     )
     async def quote_schedule(self, interaction: discord.Interaction, days: int, hour: int, minute: int) -> None:
-        if not await self._ensure_operator(interaction):
-            return
+
 
         if days < 1 or not (0 <= hour <= 23) or not (0 <= minute <= 59):
             await interaction.response.send_message("入力値が不正です。日数は1以上、時刻は0-23/0-59で指定してください。", ephemeral=True)
