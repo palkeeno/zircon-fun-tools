@@ -57,7 +57,7 @@ zircon-fun-tools/
 - `.env` ファイルから環境変数を読み込み
 - 環境（development/production）に応じた設定の切り替え
 - 機能の有効/無効フラグ管理
-- ヘルパー関数（`is_feature_enabled()`, `get_feature_settings()` 等）
+- ヘルパー関数（`get_feature_settings()` 等）
 
 #### `cogs/`
 各 Cog は `commands.Cog` を継承し、スラッシュコマンドを `@app_commands.command` で定義します。

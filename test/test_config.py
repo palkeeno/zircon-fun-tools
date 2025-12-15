@@ -41,12 +41,6 @@ class TestConfig(unittest.TestCase):
         os.environ['DISCORD_TOKEN_PROD'] = 'valid_token_prod'
         self.assertEqual(config.get_token(), 'valid_token_prod')
 
-    def test_is_feature_enabled(self):
-        import config
-
-        self.assertTrue(config.is_feature_enabled('birthday'))
-        self.assertTrue(config.is_feature_enabled('oracle'))
-        self.assertFalse(config.is_feature_enabled('nonexistent_feature'))
 
     def test_get_feature_settings(self):
         import config

@@ -134,33 +134,13 @@ QUOTE_CHANNEL_ID = _safe_int(os.getenv('QUOTE_CHANNEL_ID_DEV' if ENV == 'develop
 # 機能の設定
 FEATURES = {
     "birthday": {
-        "enabled": True,
         "settings": {
             "timezone": "Asia/Tokyo",
             "default_enabled": True,
             "default_hour": 9
         }
     },
-    "oracle": {
-        "enabled": True,
-        "settings": {
-            "max_choices": 5
-        }
-    },
-    "admin": {
-        "enabled": True,
-        "settings": {}
-    },
-    "lottery": {
-        "enabled": True, 
-        "settings": {}
-    },
-    "poster": {
-        "enabled": True, 
-        "settings": {}
-    },
     "quotes": {
-        "enabled": True,
         "settings": {
             "default_enabled": True,
             "default_days": 1,
@@ -171,20 +151,7 @@ FEATURES = {
     }
 }
 
-# FEATURESから有効/無効状態のみを抽出した辞書
-FEATURE_STATE = {k: v["enabled"] for k, v in FEATURES.items()}
 
-def is_feature_enabled(feature: str) -> bool:
-    """
-    指定された機能が有効かどうかを判定します。
-    
-    Args:
-        feature (str): 機能名
-        
-    Returns:
-        bool: 機能が有効な場合はTrue、そうでない場合はFalse
-    """
-    return FEATURES.get(feature, {}).get('enabled', False)
 
 def get_feature_settings(feature: str) -> Dict[str, Any]:
     """

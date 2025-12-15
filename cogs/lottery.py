@@ -4,7 +4,6 @@
 
 仕様（要約）:
  - /lottery role count
- - `config.is_feature_enabled('lottery')` が True の時のみ実行可能
  - 指定人数分ランダムに選出。重複選出はしない。
  - 発表前に演出（何人目の告知 + カウントダウン）を表示。
  - 各当選者発表後、当選を開始した人がNextボタンを押すことで次の抽選に移る
@@ -26,11 +25,6 @@ import config
 
 
 logger = logging.getLogger(__name__)
-
-
-
-# is_operator_member removed
-
 
 
 class ShowResultsView(discord.ui.View):
