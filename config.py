@@ -131,6 +131,14 @@ POSTER_CHANNEL_ID = int(os.getenv('POSTER_CHANNEL_ID', '0'))
 # Quotes 機能の設定
 QUOTE_CHANNEL_ID = _safe_int(os.getenv('QUOTE_CHANNEL_ID_DEV' if ENV == 'development' else 'QUOTE_CHANNEL_ID_PROD', '0'), 0)
 
+# Rumble機能の設定
+RUMBLE_CHANNEL_ID = _safe_int(os.getenv('RUMBLE_CHANNEL_ID_DEV' if ENV == 'development' else 'RUMBLE_CHANNEL_ID_PROD', '0'), 0)
+
+# AI設定
+AI_PROVIDER = os.getenv('AI_PROVIDER', 'openai')  # openai or gemini
+AI_API_KEY = os.getenv('AI_API_KEY', '')
+AI_MODEL = os.getenv('AI_MODEL', 'gpt-3.5-turbo') # default model
+
 # 機能の設定
 FEATURES = {
     "birthday": {

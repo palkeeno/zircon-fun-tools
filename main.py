@@ -31,7 +31,8 @@ class FunToolsBot(commands.Bot):
             'cogs.oracle',
             'cogs.lottery',
             'cogs.poster',
-            'cogs.quotes'
+            'cogs.quotes',
+            'cogs.rumble'
         ]
 
     async def setup_hook(self):
