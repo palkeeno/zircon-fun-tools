@@ -77,12 +77,10 @@ Copilot は以下の設計思想を理解し、コードを修正する際は必
 ### 1. モジュール性
 - 各機能は独立した Cog として実装
 - Cog 間の依存は最小限に
-- `config.py` と `permissions.py` は共通モジュールとして利用可
+- `config.py`は共通モジュールとして利用可
 
 ### 2. 権限管理
-- すべてのコマンドは `permissions.can_run_command()` で権限チェック
-- 運営ロール（`config.OPERATOR_ROLE_ID`）は全コマンド実行可能
-- その他のロールは `data/overrides.json` で個別に権限付与
+- すべてのコマンドはDiscordサーバー側で権限設定を行うためコード上では制御しない
 
 ### 3. エラーハンドリング
 - すべての非同期コマンドは `try-except` で囲む

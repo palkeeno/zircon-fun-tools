@@ -6,22 +6,18 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 
 - `.env` で定義する内容は環境依存の設定（トークンやチャンネルIDなど）です。
 - 環境に依存しない静的な既定値は `config.py` の `FEATURES` で管理します。
-- 運営コマンドで変更される設定のうち、権限付与/剥奪に関する情報は `data/overrides.json` に保存します。
-- それ以外の運営コマンドで可変となる各種設定（定期投稿のオン/オフや投稿時刻など）は `data/config.json` に保存し、ボット再起動後も保持します。
+- 運営コマンドで変更される設定のうち、定期投稿のオン/オフや投稿時刻などは `data/config.json` に保存し、ボット再起動後も保持します。
 
 ## 機能一覧
 
-### 1. 誕生日管理 (`/birthday_*`)
+### 1. 誕生日管理 (`/birthday`)
 キャラクターの誕生日を管理し、自動で誕生日を祝うメッセージを投稿します。
 
 **利用可能なコマンド:**
-- `/birthday_list` - 登録されている全ての誕生日を一覧表示（ページネーション付き）
-- `/birthday_search id_or_name:<キャラID or キャラ名>` - 特定のキャラクターの誕生日をIDか名前で検索
-- `/birthday_add id:<キャラID> month:<月> date:<日>` - 誕生日を登録（運営のみ）
-- `/birthday_delete id:<キャラID>` - 誕生日を削除（運営のみ）
-- `/birthday_import file:<CSVファイル>` - CSV形式で一括インポート（運営のみ）
-- `/birthday_toggle enabled:<true|false>` - 誕生日自動投稿のON/OFF切替（運営のみ・権限付与不可）
-- `/birthday_schedule hour:<時>` - 誕生日自動投稿の時刻を設定（運営のみ・権限付与不可）
+- `/birthday [id_or_name]` - 誕生日一覧を表示。引数（IDまたは名前）を指定すると検索。
+- `/birthday_update file:<CSV/JSON>` - ファイルをアップロードして誕生日データを一括更新（全置換）。**管理者のみ**
+- `/birthday_toggle enabled:<true|false>` - 誕生日自動投稿のON/OFF切替（管理者のみ）
+- `/birthday_schedule hour:<時>` - 誕生日自動投稿の時刻を設定（管理者のみ）
 
 **自動通知:**
 - 毎日設定された時刻（デフォルト: 9:00 JST）に自動でお祝いメッセージを投稿
@@ -45,7 +41,8 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 - キャンセル ボタンで抽選を中断できます
 
 **制限:**
-- 運営ロール、または権限を付与されたロールのメンバーのみ実行可能
+- 実行権限はDiscordの「連携 > アプリ」設定でロールやユーザーごとに制御してください。
+
 
 ### 4. ポスター生成 (`/poster`)
 キャラクター情報からオリジナルポスター画像を生成します。
@@ -57,18 +54,9 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 - 画像アセット（mask.png、国旗画像など）を `data/assets/` に配置すると見栄えが向上します（オプション）
 - 詳細は `data/assets/README.md` を参照
 
-### 5. 権限管理 (`/permit_*`)
-コマンドの実行権限を特定のロールに付与します。
 
-**利用可能なコマンド:**
-- `/permit_grant command:<コマンド名> role:<ロール>` - 指定コマンドの実行権限を付与
-- `/permit_revoke command:<コマンド名> role:<ロール>` - 付与した権限を取り消し
-- `/permit_list` - 現在の権限設定を一覧表示
 
-**制限:**
-- 運営ロールを持つメンバーのみ実行可能
-
-### 6. 名言投稿（定期配信）(`/quote_*`)
+### 5. 名言投稿（定期配信）(`/quote`)
 名言を登録し、指定したスケジュールで自動投稿します。キャラクターIDが登録されている場合は公式サイトからキャラクター画像を取得し、埋め込みのサムネイルに設定します。
 
 公式サイト: https://zircon.konami.net/nft/character/{character_id}
@@ -85,18 +73,13 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 - フッター: `#<character_id> · quote_id:<内部ID>` （キャラクターIDが登録されている場合は `#` 付き、未登録の場合は `quote_id:<内部ID>` のみ）
 
 利用可能なコマンド:
-- `/quote_list [page:<ページ番号>]` – 登録されている全ての名言を一覧表示（ページネーション付き、1ページ10件）
-- `/quote_search keyword:<キーワード>` – 発言者名または名言本文からキーワード検索
-- `/quote_add speaker:<発言者名> text:<名言本文> [character_id:<キャラクターID>]` – 名言を1件登録（character_idは任意）
-- `/quote_edit quote_id:<名言ID> [speaker:<発言者名>] [text:<名言本文>] [character_id:<キャラクターID>]` – 名言情報を編集（運営のみ）
-- `/quote_delete quote_id:<名言ID>` – 名言を削除（運営のみ、実行メッセージは公開）
-- `/quote_import file:<CSVファイル>` – 名言を一括登録（CSV）（運営のみ・権限付与不可）
-- `/quote_toggle enabled:<true|false>` – 定期投稿のON/OFF切替（運営のみ・権限付与不可）
-- `/quote_schedule days:<日数> hour:<時> minute:<分>` – 定期投稿のスケジュールを設定（例: days=1, hour=9, minute=0 で毎日9:00）（運営のみ・権限付与不可）
+- `/quote [keyword]` – 名言一覧を表示。キーワードを指定すると検索。
+- `/quote_update file:<CSV/JSON>` – 名言データをファイルで一括更新（全置換）。**管理者のみ**
+- `/quote_toggle enabled:<true|false>` – 定期投稿のON/OFF切替（管理者のみ）
+- `/quote_schedule days:<日数> hour:<時> minute:<分>` – 定期投稿のスケジュールを設定（例: days=1, hour=9, minute=0 で毎日9:00）（管理者のみ）
 
 **名言IDの確認方法:**
-- `/quote_list` で一覧表示時に各名言のIDが表示されます
-- `/quote_search` で検索した結果にもIDが表示されます
+- `/quote` (or search) で一覧表示時に各名言のIDが表示されます
 - 定期投稿された名言のフッターに `quote_id:<ID>` が表示されます
 
 CSVフォーマット（UTF-8 / BOM可）:
@@ -112,10 +95,9 @@ speaker,text[,character_id]
 - `character_id` は任意（指定するとサムネイルと公式ページURLが設定される）
 
 権限:
-- `/quote_toggle` `/quote_schedule` `/quote_import` は運営ロールのみ実行可能（ロール付与による許可は不可）
-- `/quote_add` `/quote_edit` `/quote_delete` は運営ロール、または `permissions.can_run_command()` により許可されたロールのみ
-- `/quote_delete` の実行結果は公開メッセージとして残り、実行者を記録します
-- 通常の閲覧や投稿はボットが自動で行います
+- 各コマンドの実行権限は、Discordサーバー設定の「連携 > アプリ > [Bot名]」から設定してください。
+- デフォルトでは管理系コマンドは管理者（Administrator権限）のみ実行可能に設定されています。
+- `/quote_update` などの管理コマンドは、特定の運用ロールにのみ許可することをお勧めします。
 
 データ保存:
 - `data/quotes.json` に保存（自動生成）
@@ -219,10 +201,6 @@ GUILD_ID_PROD=0
 # ========================================
 # 権限設定
 # ========================================
-# 運営ロールのID（運営コマンド実行に必要）
-OPERATOR_ROLE_ID_DEV=your_operator_role_id_here
-OPERATOR_ROLE_ID_PROD=0
-
 # 運営チャンネルのID
 ADMIN_CHANNEL_ID_DEV=your_admin_channel_id_here
 ADMIN_CHANNEL_ID_PROD=0
@@ -266,7 +244,6 @@ POSTER_CHANNEL_ID=0
 **重要な設定項目:**
 - `DISCORD_TOKEN_DEV` / `DISCORD_TOKEN_PROD`: Discord Bot のトークン（**必須**）
 - `GUILD_ID_DEV`: 開発用サーバーのID（設定すると即時コマンド反映）
-- `OPERATOR_ROLE_ID_DEV`: 運営ロールのID（運営コマンド使用に必要）
 - `BIRTHDAY_CHANNEL_ID_DEV`: 誕生日通知チャンネルのID
 
 5. **データディレクトリの確認**
@@ -319,10 +296,6 @@ INFO - ギルド 123456789 に X 個のスラッシュコマンドを同期し�
 - `BIRTHDAY_CHANNEL_ID_DEV` が正しく設定されているか確認
 - Bot がそのチャンネルへの投稿権限を持っているか確認
 - `/birthday_test` コマンドでテスト送信できるか確認
-
-**運営コマンドが使えない場合:**
-- `OPERATOR_ROLE_ID_DEV` が正しく設定されているか確認
-- 自分がそのロールを持っているか確認
 
 ## 開発者向け情報
 

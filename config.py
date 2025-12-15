@@ -105,11 +105,6 @@ ADMIN_CHANNEL_ID = int(os.getenv('ADMIN_CHANNEL_ID_DEV' if ENV == 'development' 
 if not ADMIN_CHANNEL_ID:
     logger.warning("管理者チャンネルIDが設定されていません。管理者コマンドは使用できません。")
 
-# 運営ロールIDの設定
-OPERATOR_ROLE_ID = int(os.getenv('OPERATOR_ROLE_ID_DEV' if ENV == 'development' else 'OPERATOR_ROLE_ID_PROD', '0'))  # 0は未設定扱い
-if not OPERATOR_ROLE_ID:
-    logger.warning("運営ロールが設定されていません。運営ロールが必要なコマンドは使用できません。")
-
 # 即時ギルド同期用のGuild ID（開発/本番で切替可能）
 # 設定すると、そのギルドに対してスラッシュコマンドを即時同期します（数秒で反映）。
 # 未設定(0)の場合はグローバル同期のみとなり、反映まで最大1時間かかることがあります。

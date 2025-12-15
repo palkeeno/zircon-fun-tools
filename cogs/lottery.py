@@ -4,11 +4,10 @@
 
 仕様（要約）:
  - /lottery role count
- - 運営ロールのみ実行可能（`config.OPERATOR_ROLE_ID`）
  - `config.is_feature_enabled('lottery')` が True の時のみ実行可能
  - 指定人数分ランダムに選出。重複選出はしない。
  - 発表前に演出（何人目の告知 + カウントダウン）を表示。
- - 各当選者発表後、少し間を置いて次を行う。
+ - 各当選者発表後、当選を開始した人がNextボタンを押すことで次の抽選に移る
  - 最後に当選者一覧を表示する。
 """
 
@@ -30,13 +29,8 @@ logger = logging.getLogger(__name__)
 
 
 
-def is_operator_member(member: Optional[discord.Member]) -> bool:
-    if not config.OPERATOR_ROLE_ID or not member:
-        return False
-    try:
-        return any(r.id == config.OPERATOR_ROLE_ID for r in getattr(member, "roles", []))
-    except Exception:
-        return False
+# is_operator_member removed
+
 
 
 class ShowResultsView(discord.ui.View):
@@ -50,18 +44,10 @@ class ShowResultsView(discord.ui.View):
     @discord.ui.button(label="はい", style=discord.ButtonStyle.success, emoji="✅")
     async def yes_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """はいボタンが押されたときの処理"""
-        # 権限チェック: 管理者または抽選を開始したユーザーのみ
-        member: Optional[discord.Member]
-        if isinstance(interaction.user, discord.Member):
-            member = interaction.user
-        elif interaction.guild is not None:
-            member = interaction.guild.get_member(interaction.user.id)
-        else:
-            member = None
-
-        if not is_operator_member(member) and interaction.user.id != self.operator_id:
+        # 権限チェック: 抽選を開始したユーザーのみ
+        if interaction.user.id != self.operator_id:
             await interaction.response.send_message(
-                "このボタンは管理者のみ使用できます。",
+                "このボタンは抽選を開始したユーザーのみ操作できます。",
                 ephemeral=True
             )
             return
@@ -73,18 +59,10 @@ class ShowResultsView(discord.ui.View):
     @discord.ui.button(label="いいえ", style=discord.ButtonStyle.secondary, emoji="❌")
     async def no_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """いいえボタンが押されたときの処理"""
-        # 権限チェック: 管理者または抽選を開始したユーザーのみ
-        member: Optional[discord.Member]
-        if isinstance(interaction.user, discord.Member):
-            member = interaction.user
-        elif interaction.guild is not None:
-            member = interaction.guild.get_member(interaction.user.id)
-        else:
-            member = None
-
-        if not is_operator_member(member) and interaction.user.id != self.operator_id:
+        # 権限チェック: 抽選を開始したユーザーのみ
+        if interaction.user.id != self.operator_id:
             await interaction.response.send_message(
-                "このボタンは管理者のみ使用できます。",
+                "このボタンは抽選を開始したユーザーのみ操作できます。",
                 ephemeral=True
             )
             return
@@ -105,18 +83,10 @@ class NextLotteryView(discord.ui.View):
     @discord.ui.button(label="Next", style=discord.ButtonStyle.primary, emoji="▶️")
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Nextボタンが押されたときの処理"""
-        # 権限チェック: 管理者または抽選を開始したユーザーのみ
-        member: Optional[discord.Member]
-        if isinstance(interaction.user, discord.Member):
-            member = interaction.user
-        elif interaction.guild is not None:
-            member = interaction.guild.get_member(interaction.user.id)
-        else:
-            member = None
-
-        if not is_operator_member(member) and interaction.user.id != self.operator_id:
+        # 権限チェック: 抽選を開始したユーザーのみ
+        if interaction.user.id != self.operator_id:
             await interaction.response.send_message(
-                "このボタンは管理者のみ使用できます。",
+                "このボタンは抽選を開始したユーザーのみ操作できます。",
                 ephemeral=True
             )
             return
@@ -129,18 +99,10 @@ class NextLotteryView(discord.ui.View):
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.danger, emoji="⏹️")
     async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """キャンセルボタンが押されたときの処理"""
-        # 権限チェック: 管理者または抽選を開始したユーザーのみ
-        member: Optional[discord.Member]
-        if isinstance(interaction.user, discord.Member):
-            member = interaction.user
-        elif interaction.guild is not None:
-            member = interaction.guild.get_member(interaction.user.id)
-        else:
-            member = None
-
-        if not is_operator_member(member) and interaction.user.id != self.operator_id:
+        # 権限チェック: 抽選を開始したユーザーのみ
+        if interaction.user.id != self.operator_id:
             await interaction.response.send_message(
-                "このボタンは管理者のみ使用できます。",
+                "このボタンは抽選を開始したユーザーのみ操作できます。",
                 ephemeral=True
             )
             return
@@ -159,16 +121,8 @@ class Lottery(commands.Cog):
         self.bot = bot
         logger.info("Lottery が初期化されました")
 
-    async def _is_operator(self, interaction: discord.Interaction) -> bool:
-        # kept for backward compatibility where referenced; delegate to permissions helper
-        member: Optional[discord.Member]
-        if isinstance(interaction.user, discord.Member):
-            member = interaction.user
-        elif interaction.guild is not None:
-            member = interaction.guild.get_member(interaction.user.id)
-        else:
-            member = None
-        return is_operator_member(member)
+    # _is_operator removed
+
 
     @app_commands.command(name="lottery", description="指定ロールから人数分を抽選して順に発表します")
     @app_commands.describe(

@@ -55,7 +55,6 @@ nano .env
 
 必要な設定：
 - `DISCORD_TOKEN_PROD`: 本番用Discordボットトークン
-- `OPERATOR_ROLE_ID_PROD`: 運営ロールID
 - その他、各機能の設定
 
 ### 5. ボットの起動

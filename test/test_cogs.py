@@ -38,12 +38,5 @@ class TestCogs(unittest.IsolatedAsyncioTestCase):
         cog = Oracle(self.bot)
         self.assertTrue(hasattr(cog, "bot"))
 
-    async def test_admin_is_command_enabled(self):
-        from cogs.admin import Admin
-        cog = Admin(self.bot)
-        self.assertTrue(callable(cog.is_command_enabled))
-        # config.pyのFEATURESに依存
-        self.assertIsInstance(cog.is_command_enabled("comedy_game"), bool)
-
 if __name__ == '__main__':
     unittest.main()

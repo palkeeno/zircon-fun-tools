@@ -326,48 +326,53 @@ class Quotes(commands.Cog):
 
     # ===== Slash commands =====
 
-    @app_commands.command(name="quote_list", description="登録されている名言を一覧表示します")
-    @app_commands.describe(page="表示したいページ番号 (1ページ10件)")
-    async def quote_list(self, interaction: discord.Interaction, page: Optional[int] = 1) -> None:
-        if page is None or page < 1:
-            page = 1
+    @app_commands.command(name="quote", description="名言の確認（一覧表示または検索）")
+    @app_commands.describe(keyword="検索したいキーワード（指定しない場合は一覧表示）")
+    async def quote(self, interaction: discord.Interaction, keyword: Optional[str] = None):
+        """引数なしなら一覧表示、ありなら検索。"""
+        if keyword:
+            await self._handle_search(interaction, keyword)
+        else:
+            await self._handle_list(interaction)
+
+    async def _handle_list(self, interaction: discord.Interaction, page: int = 1):
+        # List logic handling
         total = len(self.quotes)
         if total == 0:
             await interaction.response.send_message("名言はまだ登録されていません。", ephemeral=True)
             return
 
-        max_page = (total - 1) // _ITEMS_PER_PAGE + 1
-        if page > max_page:
-            page = max_page
-        start = (page - 1) * _ITEMS_PER_PAGE
-        end = min(start + _ITEMS_PER_PAGE, total)
+        # Simple random 10 or latest 10? The previous implementation had pagination.
+        # Let's support 10 items for now or re-implement pagination logic if crucial.
+        # User asked to consolidate commands.
+        # For simple consolidation, let's show first 10 items or basic pagination if we want to be fancy.
+        # Given the "list" command had page arg, we can support pagination via buttons if we really wanted to,
+        # but to keep it simple and within the "single command" paradigm without complex optional args for pages:
+        # Just show 1-10.
+        
         embed = discord.Embed(
             title="📝 名言一覧",
             description=f"登録数: {total} 件",
             color=discord.Color.blue(),
         )
-        for quote in self.quotes[start:end]:
+        for quote in self.quotes[:_ITEMS_PER_PAGE]:
             quote_id = quote.get("id", "")
             embed.add_field(
                 name=f"{quote.get('speaker', '不明')} (ID: {quote_id})",
                 value=self._format_quote_line(quote),
                 inline=False,
             )
-        embed.set_footer(text=f"ページ {page}/{max_page}")
+        
+        if total > _ITEMS_PER_PAGE:
+            embed.set_footer(text=f"※ 全 {total} 件中、先頭 {_ITEMS_PER_PAGE} 件を表示しています。絞り込むにはキーワードを指定してください。")
+            
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="quote_search", description="名言をキーワードで検索します")
-    @app_commands.describe(keyword="発言者名または名言本文から検索するキーワード")
-    async def quote_search(self, interaction: discord.Interaction, keyword: str) -> None:
-        keyword = keyword.strip()
-        if not keyword:
-            await interaction.response.send_message("検索キーワードを入力してください。", ephemeral=True)
-            return
-
-        keyword_lower = keyword.lower()
+    async def _handle_search(self, interaction: discord.Interaction, keyword: str):
+        keyword = keyword.strip().lower()
         matches = [
-            quote for quote in self.quotes
-            if keyword_lower in quote.get("speaker", "").lower() or keyword_lower in quote.get("text", "").lower()
+            q for q in self.quotes
+            if keyword in q.get("speaker", "").lower() or keyword in q.get("text", "").lower()
         ]
         if not matches:
             await interaction.response.send_message("該当する名言は見つかりませんでした。", ephemeral=True)
@@ -385,199 +390,101 @@ class Quotes(commands.Cog):
                 inline=False,
             )
         if len(matches) > _ITEMS_PER_PAGE:
-            embed.set_footer(text=f"先頭 {_ITEMS_PER_PAGE} 件のみ表示。残り {len(matches) - _ITEMS_PER_PAGE} 件はコマンドで絞り込んでください。")
+             embed.set_footer(text=f"先頭 {_ITEMS_PER_PAGE} 件のみ表示。残り {len(matches) - _ITEMS_PER_PAGE} 件はキーワードをより詳細にしてください。")
+        
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="quote_add", description="名言を1件登録します")
-    @app_commands.describe(
-        speaker="発言者名",
-        text="名言の本文",
-        character_id="関連するキャラクターID (任意)",
-    )
-    async def quote_add(self, interaction: discord.Interaction, speaker: str, text: str, character_id: Optional[str] = None) -> None:
 
-
-        speaker = speaker.strip()
-        text = text.strip()
-        character_id = character_id.strip() if character_id else None
-
-        if not speaker or not text:
-            await interaction.response.send_message("発言者と本文はいずれも必須です。", ephemeral=True)
-            return
-
-        quote_id = str(uuid.uuid4())
-        now_iso = _now(self.tz).isoformat()
-        record = {
-            "id": quote_id,
-            "speaker": speaker,
-            "text": text,
-            "character_id": character_id or None,
-            "created_by": interaction.user.id,
-            "created_at": now_iso,
-            "updated_at": now_iso,
-        }
-
-        async with self._data_lock:
-            self.quotes.append(record)
-            self._save_data()
-
-        await interaction.response.send_message(
-            f"名言を登録しました。ID: `{quote_id}`", ephemeral=True
-        )
-
-    @app_commands.command(name="quote_edit", description="登録済みの名言を編集します")
-    @app_commands.describe(
-        quote_id="編集する名言ID",
-        speaker="変更後の発言者名 (任意)",
-        text="変更後の本文 (任意)",
-        character_id="変更後のキャラクターID (未指定で変更なし、空文字で解除)",
-    )
-    async def quote_edit(
-        self,
-        interaction: discord.Interaction,
-        quote_id: str,
-        speaker: Optional[str] = None,
-        text: Optional[str] = None,
-        character_id: Optional[str] = None,
-    ) -> None:
-
-
-        if speaker is None and text is None and character_id is None:
-            await interaction.response.send_message("更新する項目を少なくとも1つ指定してください。", ephemeral=True)
-            return
-
-        async with self._data_lock:
-            target = next((q for q in self.quotes if q.get("id") == quote_id), None)
-            if not target:
-                await interaction.response.send_message("指定された名言IDが見つかりません。", ephemeral=True)
-                return
-
-            if speaker is not None:
-                speaker = speaker.strip()
-                if speaker:
-                    target["speaker"] = speaker
-            if text is not None:
-                text = text.strip()
-                if text:
-                    target["text"] = text
-            if character_id is not None:
-                cleaned = character_id.strip()
-                target["character_id"] = cleaned or None
-            target["updated_at"] = _now(self.tz).isoformat()
-            self._save_data()
-
-        await interaction.response.send_message("名言を更新しました。", ephemeral=True)
-
-    @app_commands.command(name="quote_delete", description="名言を削除します")
-    @app_commands.describe(quote_id="削除する名言ID")
-    async def quote_delete(self, interaction: discord.Interaction, quote_id: str) -> None:
-
-
-        async with self._data_lock:
-            index = next((i for i, q in enumerate(self.quotes) if q.get("id") == quote_id), None)
-            if index is None:
-                await interaction.response.send_message("指定された名言IDが見つかりません。", ephemeral=True)
-                return
-            removed = self.quotes.pop(index)
-            self._save_data()
-
-        speaker = removed.get("speaker", "不明")
-        truncated_text = removed.get("text", "").replace("\n", " ")
-        if len(truncated_text) > 100:
-            truncated_text = truncated_text[:97] + "..."
-        message = (
-            f"🗑️ {interaction.user.mention} が名言を削除しました\n"
-            f"ID: `{quote_id}` / 発言者: {speaker}\n"
-            f"本文: {truncated_text}"
-        )
-        await interaction.response.send_message(
-            message,
-            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
-        )
-
-    @app_commands.command(name="quote_import", description="CSVから名言を一括登録します")
-    @app_commands.describe(file="speaker,text[,character_id] の形式のCSVファイル")
-    async def quote_import(self, interaction: discord.Interaction, file: discord.Attachment) -> None:
-
+    @app_commands.command(name="quote_update", description="ファイルから名言データを一括更新します（全置換）")
+    @app_commands.describe(file="更新用ファイル（CSV/JSON）")
+    async def quote_update(self, interaction: discord.Interaction, file: discord.Attachment):
+        """CSVファイルから名言を一括更新（全置換）します。"""
 
         await interaction.response.defer(ephemeral=True)
-
         try:
-            raw = await file.read()
-            text_data = raw.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            await interaction.followup.send("CSVファイルはUTF-8で保存してください。", ephemeral=True)
-            return
-        except Exception as exc:
-            logger.error("CSVの読み込みに失敗しました: %s", exc)
-            await interaction.followup.send("ファイルの読み込みに失敗しました。", ephemeral=True)
-            return
+            content = await file.read()
+            filename = file.filename.lower()
+            new_quotes = []
 
-        stream = io.StringIO(text_data)
-        reader = csv.DictReader(stream)
-        rows: List[Dict[str, Optional[str]]] = []
-        if reader.fieldnames and "speaker" in [f.lower() for f in reader.fieldnames] and "text" in [f.lower() for f in reader.fieldnames]:
-            normalized_fields = [f.lower() for f in reader.fieldnames]
-            for row in reader:
-                rows.append({
-                    "speaker": row.get(reader.fieldnames[normalized_fields.index("speaker")], ""),
-                    "text": row.get(reader.fieldnames[normalized_fields.index("text")], ""),
-                    "character_id": row.get(reader.fieldnames[normalized_fields.index("character_id")], "") if "character_id" in normalized_fields else None,
-                })
-        else:
-            stream.seek(0)
-            plain_reader = csv.reader(stream)
-            for row in plain_reader:
-                if not row:
-                    continue
-                speaker = row[0] if len(row) > 0 else ""
-                text_val = row[1] if len(row) > 1 else ""
-                character_id = row[2] if len(row) > 2 else None
-                rows.append({"speaker": speaker, "text": text_val, "character_id": character_id})
-
-        if not rows:
-            await interaction.followup.send("CSVに有効な行が見つかりませんでした。", ephemeral=True)
-            return
-
-        added = 0
-        skipped = 0
-        new_records: List[Dict] = []
-        for row in rows:
-            speaker_val = (row.get("speaker") or "").strip()
-            text_val = (row.get("text") or "").strip()
-            character_id_val = (row.get("character_id") or "").strip()
-            if not speaker_val or not text_val:
-                skipped += 1
-                continue
             now_iso = _now(self.tz).isoformat()
-            new_records.append({
-                "id": str(uuid.uuid4()),
-                "speaker": speaker_val,
-                "text": text_val,
-                "character_id": character_id_val or None,
-                "created_by": interaction.user.id,
-                "created_at": now_iso,
-                "updated_at": now_iso,
-            })
-            added += 1
+            
+            if filename.endswith(".json"):
+                 data = json.loads(content.decode("utf-8"))
+                 if isinstance(data, list):
+                     for item in data:
+                        new_quotes.append({
+                            "id": str(uuid.uuid4()),
+                            "speaker": item.get("speaker", "不明"),
+                            "text": item.get("text", ""),
+                            "character_id": item.get("character_id"),
+                            "created_by": interaction.user.id,
+                            "created_at": now_iso,
+                            "updated_at": now_iso
+                        })
+                 else:
+                     await interaction.followup.send("JSONはリスト形式である必要があります。", ephemeral=True)
+                     return
 
-        if added == 0:
-            await interaction.followup.send("CSVに有効な名言がありませんでした。", ephemeral=True)
-            return
+            elif filename.endswith(".csv"):
+                text_data = content.decode("utf-8-sig")
+                f = io.StringIO(text_data)
+                reader = csv.DictReader(f)
+                
+                # Check headers or fallback to positional
+                fieldnames = [fn.lower() for fn in (reader.fieldnames or [])]
+                if "speaker" in fieldnames and "text" in fieldnames:
+                    # DictReader usage
+                    f.seek(0)
+                    reader = csv.DictReader(f) # reset
+                    for row in reader:
+                        # Normalize keys
+                        row_lower = {k.lower(): v for k, v in row.items()}
+                        new_quotes.append({
+                            "id": str(uuid.uuid4()),
+                            "speaker": row_lower.get("speaker", "不明"),
+                            "text": row_lower.get("text", ""),
+                            "character_id": row_lower.get("character_id"),
+                            "created_by": interaction.user.id,
+                            "created_at": now_iso,
+                            "updated_at": now_iso
+                        })
+                else:
+                    # Positional fallback
+                    f.seek(0)
+                    reader_list = list(csv.reader(f))
+                    for row in reader_list:
+                         if not row: continue
+                         if len(row) >= 2:
+                             new_quotes.append({
+                                "id": str(uuid.uuid4()),
+                                "speaker": row[0],
+                                "text": row[1],
+                                "character_id": row[2] if len(row) > 2 else None,
+                                "created_by": interaction.user.id,
+                                "created_at": now_iso,
+                                "updated_at": now_iso
+                            })
+            else:
+                 await interaction.followup.send("対応形式: .json, .csv", ephemeral=True)
+                 return
+            
+            if not new_quotes:
+                await interaction.followup.send("データが見つかりませんでした。", ephemeral=True)
+                return
 
-        async with self._data_lock:
-            self.quotes.extend(new_records)
-            self._save_data()
+            async with self._data_lock:
+                self.quotes = new_quotes
+                self._save_data()
 
-        await interaction.followup.send(
-            f"{added} 件の名言を登録しました。スキップ: {skipped} 件", ephemeral=True
-        )
+            await interaction.followup.send(f"名言データを全置換しました ({len(new_quotes)}件)。", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error in quote_update: {e}", exc_info=True)
+            await interaction.followup.send("更新中にエラーが発生しました。", ephemeral=True)
 
     @app_commands.command(name="quote_toggle", description="名言の定期投稿をON/OFFします")
     @app_commands.describe(enabled="true で有効化、false で無効化")
     async def quote_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
-
-
         async with self._data_lock:
             self.settings["enabled"] = bool(enabled)
             self._persist_settings()
@@ -591,7 +498,7 @@ class Quotes(commands.Cog):
         minute="投稿時刻 (0-59)",
     )
     async def quote_schedule(self, interaction: discord.Interaction, days: int, hour: int, minute: int) -> None:
-
+        """名言の定期投稿スケジュールを設定するコマンド."""
 
         if days < 1 or not (0 <= hour <= 23) or not (0 <= minute <= 59):
             await interaction.response.send_message("入力値が不正です。日数は1以上、時刻は0-23/0-59で指定してください。", ephemeral=True)

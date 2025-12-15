@@ -12,9 +12,8 @@
 
 1. **モジュール性**: 各機能は `cogs/` ディレクトリ内の独立した Cog として実装
 2. **設定の一元管理**: 環境変数は `.env` → `config.py` で管理
-3. **権限管理の柔軟性**: `permissions.py` でロールベースのアクセス制御
-4. **エラーハンドリング**: ログ出力とユーザーへの適切なフィードバック
-5. **Discord のベストプラクティス準拠**: スラッシュコマンド、Embed、View システムの活用
+3. **エラーハンドリング**: ログ出力とユーザーへの適切なフィードバック
+4. **Discord のベストプラクティス準拠**: スラッシュコマンド、Embed、View システムの活用
 
 ---
 
@@ -26,7 +25,6 @@
 zircon-fun-tools/
 ├── main.py              # Bot起動のエントリーポイント
 ├── config.py            # 環境変数と設定の管理
-├── permissions.py       # 権限チェックのユーティリティ
 ├── setup_fonts.py       # フォント自動セットアップ（Linux用）
 ├── requirements.txt     # Pythonパッケージ依存関係
 ├── .env                 # 環境変数（Gitには含まれない）
@@ -36,10 +34,8 @@ zircon-fun-tools/
 │   ├── oracle.py        # 占い機能
 │   ├── lottery.py       # 抽選機能
 │   ├── poster.py        # ポスター生成機能
-│   └── admin.py         # 権限管理機能
 ├── data/                # 永続化データ（自動生成）
 │   ├── birthdays.json   # 誕生日データ
-│   ├── overrides.json   # 誕生日オーバーライドデータ
 │   └── assets/          # 画像アセット（手動配置）
 └── test/                # ユニットテスト
     ├── __init__.py
@@ -63,11 +59,6 @@ zircon-fun-tools/
 - 機能の有効/無効フラグ管理
 - ヘルパー関数（`is_feature_enabled()`, `get_feature_settings()` 等）
 
-#### `permissions.py`
-- 運営ロール（`OPERATOR_ROLE_ID`）の判定
-- コマンド単位のロール権限オーバーライド（`data/overrides.json`）
-- `can_run_command()` 関数でコマンド実行可否を判定
-
 #### `cogs/`
 各 Cog は `commands.Cog` を継承し、スラッシュコマンドを `@app_commands.command` で定義します。
 
@@ -75,7 +66,6 @@ zircon-fun-tools/
 - **oracle.py**: 選択肢から1つをランダムに選ぶ占い機能
 - **lottery.py**: ロールメンバーからランダムに抽選
 - **poster.py**: キャラクター情報から画像ポスターを生成
-- **admin.py**: コマンド権限の管理（permit, permit_revoke, permit_list）
 
 ---
 
@@ -202,30 +192,6 @@ await interaction.response.send_message("メッセージ", view=view)
 
 ---
 
-## 権限管理
-
-### 運営ロール
-
-`config.OPERATOR_ROLE_ID` に設定されたロールを持つユーザーは、全てのコマンドを実行可能です。
-
-### コマンド権限のオーバーライド
-
-`permissions.py` の仕組みにより、運営以外のユーザーにも特定のコマンド実行権限を付与できます。
-
-```python
-# コマンド実行前にチェック
-if not permissions.can_run_command(interaction, 'command_name'):
-    await interaction.response.send_message(
-        "このコマンドを実行する権限がありません。",
-        ephemeral=True
-    )
-    return
-```
-
-権限の付与/取り消しは `/permit` および `/permit_revoke` コマンドで行います。
-
----
-
 ## データの永続化
 
 ### JSON ファイル
@@ -346,7 +312,6 @@ async def setup(bot: commands.Bot):
 self.initial_extensions = [
     'cogs.birthday',
     'cogs.oracle',
-    'cogs.admin',
     'cogs.lottery',
     'cogs.poster',
     'cogs.new_feature',  # 追加
@@ -390,11 +355,6 @@ FEATURES = {
 
 - `.env` の `GUILD_ID_DEV` を設定してギルド即時同期を有効化
 - Bot の OAuth2 スコープに `applications.commands` が含まれているか確認
-
-#### 権限エラー
-
-- Bot がチャンネルへの投稿権限を持っているか確認
-- `permissions.can_run_command()` が正しく呼ばれているか確認
 
 #### データの読み込みエラー
 
