@@ -122,17 +122,26 @@ class Lottery(commands.Cog):
     @app_commands.describe(
         role="抽選対象のロール",
         count="抽選する人数（1以上）",
+        interval="発表前のインターバル秒数（5秒以上、デフォルト: 20秒）",
     )
     async def lottery(
         self,
         interaction: discord.Interaction,
         role: discord.Role,
         count: int,
+        interval: int = 20,
     ):
 
         if count < 1:
-
             await interaction.response.send_message("抽選人数は1以上で指定してください。", ephemeral=True)
+            return
+        
+        # インターバル秒数のバリデーション
+        if interval < 5:
+            await interaction.response.send_message(
+                "インターバル秒数は5秒以上で指定してください。",
+                ephemeral=True
+            )
             return
   
         # 集合作成（ボット除外）。指定ロールを持つ全員が対象。
@@ -177,10 +186,13 @@ class Lottery(commands.Cog):
             header = f"# 【{i}人目の当選者を発表します！】"
             await send_target(header)
 
-            # カウントダウン（編集で見せるのがスマートだが、単純送信でもOK）
-            await send_target("カウントダウン... 3")
-            await asyncio.sleep(1)
-            for sec in range(2, 0, -1):
+            # インターバル秒数に応じた待機（最後の5秒以外は無言で待つ）
+            if interval > 5:
+                await asyncio.sleep(interval - 5)
+            
+            # 最後の5秒だけカウントダウンを表示
+            countdown_start = min(5, interval)
+            for sec in range(countdown_start, 0, -1):
                 await send_target(f"カウントダウン... {sec}")
                 await asyncio.sleep(1)
 
@@ -258,7 +270,7 @@ class Lottery(commands.Cog):
 
         # 最終当選者一覧を表示（空の場合は何も表示しない）
         if already_winners:
-            desc_lines = [f"{idx+1}. {m.mention}" for idx, m in enumerate(already_winners)]
+            desc_lines = [f"{idx+1}. {m.display_name}" for idx, m in enumerate(already_winners)]
             final_embed = discord.Embed(title="🏆 抽選結果一覧", description="\n".join(desc_lines), color=discord.Color.green())
             await send_target(embed=final_embed)
 
