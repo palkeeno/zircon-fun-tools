@@ -9,7 +9,6 @@ from discord.ext import commands
 import random
 import asyncio
 import logging
-import traceback
 
 
 # ロギングの設定
@@ -105,15 +104,4 @@ class Oracle(commands.Cog):
                 logger.error(f"エラーメッセージの送信に失敗しました: {followup_error}", exc_info=True)
 
 async def setup(bot: commands.Bot):
-    """
-    Cogをボットに追加する関数
-    
-    Args:
-        bot (commands.Bot): Discordボットのインスタンス
-    """
-    try:
-        await bot.add_cog(Oracle(bot))
-        logger.info("Oracle cogが正常に追加されました")
-    except Exception as e:
-        logger.error(f"Oracle cogの追加中にエラーが発生しました: {e}\n{traceback.format_exc()}")
-        raise 
+    await bot.add_cog(Oracle(bot)) 

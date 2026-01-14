@@ -58,11 +58,11 @@ class FunToolsBot(commands.Bot):
                     # 4) グローバルコマンドをクリアして、サーバー設定画面での二重登録を解消
                     self.tree.clear_commands(guild=None)
                     await self.tree.sync()  # グローバル側を削除反映
-                    logger.info(f"ギルド {config.GUILD_ID} に {len(guild_synced)} 個のスラッシュコマンドを同期（ギルド限定化）し、グローバル定義を削除しました")
+                    logger.info(f"スラッシュコマンド同期完了: {len(guild_synced)}個")
                 else:
                     # グローバル同期（反映まで最長1時間程度かかる）
                     synced = await self.tree.sync()
-                    logger.info(f"グローバルに {len(synced)} 個のスラッシュコマンドを同期しました（反映には時間がかかる場合があります）")
+                    logger.info(f"スラッシュコマンド同期完了: {len(synced)}個（グローバル）")
             except Exception as e:
                 logger.error(f"スラッシュコマンドの同期に失敗しました: {e}")
                 logger.error(traceback.format_exc())

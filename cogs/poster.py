@@ -11,6 +11,7 @@ import logging
 import traceback
 import config
 import platform
+import math
 
 import os
 import io
@@ -143,11 +144,35 @@ class Poster(commands.Cog):
             logger.error("フォントのダウンロードに失敗しました: %s", e)
             return ""
 
-    def _draw_poster(self, char, mask, peaceful, brave, glory, freedom, info):
+    def _draw_text_with_glow(self, draw: ImageDraw.Draw, text: str, x: int, y: int, 
+                             font: ImageFont.FreeTypeFont, glow_layers: list, 
+                             main_color: tuple = (255, 255, 255)) -> None:
+        """
+        グロー（光彩）効果付きでテキストを描画する
+        
+        Args:
+            draw: ImageDrawオブジェクト
+            text: 描画するテキスト
+            x: X座標
+            y: Y座標
+            font: フォント
+            glow_layers: グロー効果のレイヤー設定 [(radius, (r, g, b, a)), ...]
+            main_color: メインテキストの色 (デフォルト: 白)
+        """
+        # グロー効果を描画
+        for radius, color in glow_layers:
+            for angle in range(0, 360, 30):  # 12方向
+                dx = int(radius * math.cos(math.radians(angle)))
+                dy = int(radius * math.sin(math.radians(angle)))
+                draw.text((x + dx, y + dy), text, fill=color, font=font)
+        
+        # 本体を描画
+        draw.text((x, y), text, fill=main_color, font=font)
+
+    def _draw_poster(self, char, mask, info):
         """
         新仕様：1600×2100pxのポスター画像を生成
         """
-        from PIL import ImageFilter
         
         # 1. 1600×2100pxのキャンバスを生成
         canvas = Image.new('RGB', (1600, 2100), color=(255, 255, 255))
@@ -172,16 +197,6 @@ class Poster(commands.Cog):
         font_40 = self._try_load_font(config.POSTER_FONT_A, 40)
         font_80 = self._try_load_font(config.POSTER_FONT_B, 80)
         font_name = self._try_load_font(config.POSTER_FONT_C, 80)
-        
-        # lines用のフォントサイズを文字数に応じて調整
-        lines_text = info.get('lines', '')
-        lines_length = len(lines_text)
-        if lines_length <= 8:
-            font_lines = self._try_load_font(config.POSTER_FONT_D, 120)
-        elif lines_length <= 12:
-            font_lines = self._try_load_font(config.POSTER_FONT_D, 100)
-        else:
-            font_lines = self._try_load_font(config.POSTER_FONT_D, 80)
         
         # 国旗画像の読み込み（描画はテキストの直前に行う）
         country_raw = info.get('country', '') or ''
@@ -209,6 +224,15 @@ class Poster(commands.Cog):
         # 6. セリフ（lines）を縦書きで右揃え（50, 100）から（350, 1400）に列折り返し表示
         lines_text = info.get('lines', '')
         if lines_text:
+            # lines用のフォントサイズを文字数に応じて調整
+            lines_length = len(lines_text)
+            if lines_length <= 8:
+                font_lines = self._try_load_font(config.POSTER_FONT_D, 120)
+            elif lines_length <= 12:
+                font_lines = self._try_load_font(config.POSTER_FONT_D, 100)
+            else:
+                font_lines = self._try_load_font(config.POSTER_FONT_D, 80)
+            
             # 表示領域
             x_left, x_right = 50, 350
             y_top, y_bottom = 100, 1400
@@ -266,22 +290,14 @@ class Poster(commands.Cog):
                 x_draw = x_col_right - cw
                 y_draw = y_cursor
 
-                # グロー（光彩）効果：複数レイヤーで徐々に薄く広げる
+                # グロー（光彩）効果付きで描画
                 glow_layers = [
                     (8, (80, 80, 80, 255)),    # 最外層
                     (6, (95, 95, 95, 255)),    # 外層
                     (4, (110, 110, 110, 255)), # 中層
                     (2, (130, 130, 130, 255)), # 内層
                 ]
-                for radius, color in glow_layers:
-                    for angle in range(0, 360, 30):  # 12方向
-                        import math
-                        dx = int(radius * math.cos(math.radians(angle)))
-                        dy = int(radius * math.sin(math.radians(angle)))
-                        draw.text((x_draw + dx, y_draw + dy), ch, fill=color, font=font_lines)
-                
-                # 本体（白）
-                draw.text((x_draw, y_draw), ch, fill=(255, 255, 255), font=font_lines)
+                self._draw_text_with_glow(draw, ch, x_draw, y_draw, font_lines, glow_layers)
 
                 y_cursor += char_spacing
         
@@ -294,22 +310,14 @@ class Poster(commands.Cog):
             x_center = 100 + (1400 - text_width) // 2
             y_pos = 1420
 
-            # グロー（光彩）効果：複数レイヤーで徐々に薄く広げる
-            import math
+            # グロー（光彩）効果付きで描画
             glow_layers = [
                 (8, (80, 80, 80, 255)),    # 最外層
                 (6, (95, 95, 95, 255)),    # 外層
                 (4, (110, 110, 110, 255)), # 中層
                 (2, (130, 130, 130, 255)), # 内層
             ]
-            for radius, color in glow_layers:
-                for angle in range(0, 360, 30):  # 12方向
-                    dx = int(radius * math.cos(math.radians(angle)))
-                    dy = int(radius * math.sin(math.radians(angle)))
-                    draw.text((x_center + dx, y_pos + dy), name, fill=color, font=font_name)
-
-            # 本体（白）
-            draw.text((x_center, y_pos), name, fill=(255, 255, 255), font=font_name)
+            self._draw_text_with_glow(draw, name, x_center, y_pos, font_name, glow_layers)
         
         # 5. 目標（goal）を領域中央揃えで配置（850, 1500）から（1550, 2050）
         goal = info.get('goal', '')
@@ -399,22 +407,14 @@ class Poster(commands.Cog):
                 line_width = bbox[2] - bbox[0]
                 x_centered = goal_x_left + (goal_width - line_width) // 2
 
-                # グロー（光彩）効果：複数レイヤーで徐々に薄く広げる
-                import math
+                # グロー（光彩）効果付きで描画（青み系）
                 glow_layers = [
                     (8, (100, 100, 150, 255)),  # 最外層（薄い青み）
                     (6, (120, 120, 170, 255)),  # 外層
                     (4, (140, 140, 190, 255)),  # 中層
                     (2, (160, 160, 210, 255)),  # 内層
                 ]
-                for radius, color in glow_layers:
-                    for angle in range(0, 360, 30):  # 12方向
-                        dx = int(radius * math.cos(math.radians(angle)))
-                        dy = int(radius * math.sin(math.radians(angle)))
-                        draw.text((x_centered + dx, y_current + dy), line, fill=color, font=best_font)
-
-                # 本体（白）
-                draw.text((x_centered, y_current), line, fill=(255, 255, 255), font=best_font)
+                self._draw_text_with_glow(draw, line, x_centered, y_current, best_font, glow_layers)
 
                 y_current += best_line_height
         
@@ -615,11 +615,8 @@ class Poster(commands.Cog):
                 if os.path.exists(self.mask_path):
                     mask = Image.open(self.mask_path)
                 
-                # 国旗画像を読み込み（存在しない場合はNone）
-                peaceful = Image.open(self.peaceful_path) if os.path.exists(self.peaceful_path) else None
-                brave = Image.open(self.brave_path) if os.path.exists(self.brave_path) else None
-                glory = Image.open(self.glory_path) if os.path.exists(self.glory_path) else None
-                freedom = Image.open(self.freedom_path) if os.path.exists(self.freedom_path) else None
+                # 注: peaceful, brave, glory, freedom 画像は現在使用されていません
+                # 将来の機能拡張のために読み込み処理は残していますが、_draw_poster()には渡していません
             except Exception as e:
                 logger.error(f"画像ファイルの読み込みに失敗: {e}")
                 await interaction.followup.send("画像ファイルの読み込みに失敗しました。管理者に連絡してください。", ephemeral=True)
@@ -671,7 +668,7 @@ class Poster(commands.Cog):
                 await interaction.followup.send("キャラクター情報の取得に失敗しました。番号が正しいか、または公式サイトの仕様変更がないかご確認ください。", ephemeral=True)
                 return
             try:
-                poster_img = self._draw_poster(char, mask, peaceful, brave, glory, freedom, info)
+                poster_img = self._draw_poster(char, mask, info)
                 img_bytes = io.BytesIO()
                 poster_img.save(img_bytes, format='PNG')
                 img_bytes.seek(0)

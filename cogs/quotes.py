@@ -18,31 +18,14 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 import config
-
-
-try:
-    from zoneinfo import ZoneInfo  # Python 3.9+
-except ImportError:  # pragma: no cover - fallback for environments without zoneinfo
-    ZoneInfo = None  # type: ignore
+import utils
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_TIMEZONE = "Asia/Tokyo"
 # 環境に依存しないパス構築
 _DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
 _DATA_DIR = os.path.abspath(_DATA_DIR)
 _DEFAULT_DATA_PATH = os.path.join(_DATA_DIR, "quotes.json")
 _ITEMS_PER_PAGE = 10
-
-
-def _get_timezone() -> datetime.tzinfo:
-    """Return the timezone used for scheduling."""
-    if ZoneInfo is not None:
-        try:
-            return ZoneInfo(_DEFAULT_TIMEZONE)
-        except Exception:  # pragma: no cover - ZoneInfo may raise if timezone absent
-            logger.warning("ZoneInfoで %s を取得できません。UTC+09:00 を使用します", _DEFAULT_TIMEZONE)
-    return datetime.timezone(datetime.timedelta(hours=9))
 
 
 def _now(tz: datetime.tzinfo) -> datetime.datetime:
@@ -55,7 +38,7 @@ class Quotes(commands.Cog):
 
     def __init__(self, bot: commands.Bot, data_path: Optional[str] = None) -> None:
         self.bot = bot
-        self.tz = _get_timezone()
+        self.tz = utils.get_timezone()
         self.data_path = data_path or _DEFAULT_DATA_PATH
         self._data_lock = asyncio.Lock()
         self.quotes: List[Dict] = []
@@ -80,34 +63,11 @@ class Quotes(commands.Cog):
 
     @staticmethod
     def _coerce_bool(value: Any, fallback: bool) -> bool:
-        if isinstance(value, bool):
-            return value
-        if value is None:
-            return fallback
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"true", "1", "yes", "on"}:
-                return True
-            if lowered in {"false", "0", "no", "off"}:
-                return False
-            return fallback
-        try:
-            return bool(value)
-        except Exception:
-            return fallback
+        return utils.coerce_bool(value, fallback)
 
     @staticmethod
     def _coerce_int(value: Any, fallback: int, *, minimum: int, maximum: Optional[int] = None) -> int:
-        try:
-            if value is None:
-                raise TypeError
-            number = int(value)
-        except (TypeError, ValueError):
-            number = fallback
-        number = max(minimum, number)
-        if maximum is not None:
-            number = min(maximum, number)
-        return number
+        return utils.coerce_int(value, fallback, minimum=minimum, maximum=maximum)
 
     def _normalize_settings(self, raw: Dict[str, Any]) -> Dict[str, Any]:
         defaults = self._default_settings

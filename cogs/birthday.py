@@ -12,34 +12,16 @@ import traceback
 import datetime
 import os
 import config
+import utils
 
 import csv
 import urllib.request
 import io
 from typing import Any, Dict, Optional, Tuple
 from PIL import Image
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-
-try:
-    from zoneinfo import ZoneInfo  # Python 3.9+
-except ImportError:  # pragma: no cover
-    ZoneInfo = None  # type: ignore
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
-
-_DEFAULT_TIMEZONE = "Asia/Tokyo"
-
-
-def _get_timezone() -> datetime.tzinfo:
-    if ZoneInfo is not None:
-        try:
-            return ZoneInfo(_DEFAULT_TIMEZONE)
-        except Exception:
-            logger.warning("ZoneInfoで %s を取得できません。UTC+09:00 を使用します", _DEFAULT_TIMEZONE)
-    return datetime.timezone(datetime.timedelta(hours=9))
 
 class BirthdayPaginationView(discord.ui.View):
     """誕生日一覧のページネーション用ビュー"""
@@ -119,7 +101,7 @@ class Birthday(commands.Cog):
             bot (commands.Bot): ボットのインスタンス
         """
         self.bot = bot
-        self.tz = _get_timezone()
+        self.tz = utils.get_timezone()
         self.birthdays = []
         self.defaults: Dict[str, Any] = self._feature_defaults()
         self.settings: Dict[str, Any] = {}
@@ -142,31 +124,11 @@ class Birthday(commands.Cog):
 
     @staticmethod
     def _coerce_bool(value: Any, fallback: bool) -> bool:
-        if isinstance(value, bool):
-            return value
-        if value is None:
-            return fallback
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"true", "1", "yes", "on"}:
-                return True
-            if lowered in {"false", "0", "no", "off"}:
-                return False
-            return fallback
-        try:
-            return bool(value)
-        except Exception:
-            return fallback
+        return utils.coerce_bool(value, fallback)
 
     @staticmethod
     def _clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:
-        try:
-            if value is None:
-                return fallback
-            number = int(value)
-        except (TypeError, ValueError):
-            return fallback
-        return max(minimum, min(maximum, number))
+        return utils.clamp_int(value, minimum, maximum, fallback)
 
     def _load_settings(self) -> None:
         stored = config.get_runtime_section("birthday")
@@ -202,15 +164,6 @@ class Birthday(commands.Cog):
     def _is_scheduled_time(self, now: datetime.datetime) -> bool:
         target_hour = self._clamp_int(self.settings.get("hour"), 0, 23, self.defaults["hour"])
         return now.hour == target_hour and now.minute == 0
-
-    def _get_member(self, interaction: discord.Interaction) -> Optional[discord.Member]:
-        if isinstance(interaction.user, discord.Member):
-            return interaction.user
-        if interaction.guild:
-            return interaction.guild.get_member(interaction.user.id)
-        return None
-
-
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -604,16 +557,4 @@ class Birthday(commands.Cog):
         )
 
 async def setup(bot: commands.Bot):
-    """
-    コグをボットに追加します。
-    
-    Args:
-        bot (commands.Bot): ボットのインスタンス
-    """
-    try:
-        await bot.add_cog(Birthday(bot))
-        logger.info("Birthday cog loaded successfully")
-    except Exception as e:
-        logger.error(f"Failed to load Birthday cog: {e}")
-        logger.error(traceback.format_exc())
-        raise 
+    await bot.add_cog(Birthday(bot)) 
