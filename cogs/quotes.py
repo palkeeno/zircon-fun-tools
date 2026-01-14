@@ -93,13 +93,6 @@ class Quotes(commands.Cog):
         except Exception as exc:
             logger.error("名言設定の保存に失敗しました: %s", exc, exc_info=True)
 
-    def _get_member(self, interaction: discord.Interaction) -> Optional[discord.Member]:
-        if isinstance(interaction.user, discord.Member):
-            return interaction.user
-        if interaction.guild is not None:
-            return interaction.guild.get_member(interaction.user.id)
-        return None
-
     def _ensure_data_dir(self) -> None:
         os.makedirs(os.path.dirname(self.data_path) or ".", exist_ok=True)
 

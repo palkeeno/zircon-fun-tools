@@ -194,8 +194,6 @@ class Poster(commands.Cog):
                 logger.warning(f"マスク適用に失敗: {e}")
         
         # フォント読み込み
-        font_40 = self._try_load_font(config.POSTER_FONT_A, 40)
-        font_80 = self._try_load_font(config.POSTER_FONT_B, 80)
         font_name = self._try_load_font(config.POSTER_FONT_C, 80)
         
         # 国旗画像の読み込み（描画はテキストの直前に行う）
