@@ -25,6 +25,7 @@
 zircon-fun-tools/
 ├── main.py              # Bot起動のエントリーポイント
 ├── config.py            # 環境変数と設定の管理
+├── utils.py             # ユーティリティ関数
 ├── setup_fonts.py       # フォント自動セットアップ（Linux用）
 ├── requirements.txt     # Pythonパッケージ依存関係
 ├── .env                 # 環境変数（Gitには含まれない）
@@ -34,15 +35,20 @@ zircon-fun-tools/
 │   ├── oracle.py        # 占い機能
 │   ├── lottery.py       # 抽選機能
 │   ├── poster.py        # ポスター生成機能
+│   └── quotes.py        # 名言投稿機能
 ├── data/                # 永続化データ（自動生成）
 │   ├── birthdays.json   # 誕生日データ
+│   ├── config.json      # ランタイム設定（定期投稿スケジュール等）
+│   ├── quotes.json      # 名言データ
 │   └── assets/          # 画像アセット（手動配置）
 └── test/                # ユニットテスト
     ├── __init__.py
     ├── run_tests.py
     ├── test_bot.py
     ├── test_cogs.py
-    └── test_config.py
+    ├── test_config.py
+    ├── test_quotes.py
+    └── test_setup_fonts.py
 ```
 
 ### 主要コンポーネント
@@ -66,6 +72,7 @@ zircon-fun-tools/
 - **oracle.py**: 選択肢から1つをランダムに選ぶ占い機能
 - **lottery.py**: ロールメンバーからランダムに抽選
 - **poster.py**: キャラクター情報から画像ポスターを生成
+- **quotes.py**: 名言の登録・検索・定期投稿機能
 
 ---
 
@@ -93,7 +100,6 @@ from discord import app_commands
 from discord.ext import commands
 import logging
 import config
-import permissions
 
 logger = logging.getLogger(__name__)
 
@@ -108,14 +114,6 @@ class MyCog(commands.Cog):
     async def my_command(self, interaction: discord.Interaction, arg: str):
         """コマンドの実装"""
         try:
-            # 権限チェック（必要に応じて）
-            if not permissions.can_run_command(interaction, 'mycommand'):
-                await interaction.response.send_message(
-                    "このコマンドを実行する権限がありません。",
-                    ephemeral=True
-                )
-                return
-            
             # 処理の実装
             await interaction.response.send_message(f"引数: {arg}")
         
@@ -285,7 +283,6 @@ from discord import app_commands
 from discord.ext import commands
 import logging
 import config
-import permissions
 
 logger = logging.getLogger(__name__)
 
@@ -314,6 +311,7 @@ self.initial_extensions = [
     'cogs.oracle',
     'cogs.lottery',
     'cogs.poster',
+    'cogs.quotes',
     'cogs.new_feature',  # 追加
 ]
 ```
@@ -482,4 +480,4 @@ pip freeze > requirements.txt
 
 ---
 
-**最終更新日**: 2025-11-11
+**最終更新日**: 2026-01-15

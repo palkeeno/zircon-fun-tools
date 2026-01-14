@@ -255,8 +255,7 @@ POSTER_CHANNEL_ID=0
 
 `data/` ディレクトリが自動作成されます。以下のファイルが使用されます：
 - `data/birthdays.json` - 誕生日データ（自動生成）
-- `data/config.json` - 各アプリの設定（自動生成）
-- `data/overrides.json` - 権限オーバーライドデータ（自動生成）
+- `data/config.json` - 各機能の設定（自動生成）
 - `data/quotes.json` - 名言データ（自動生成）
 - `data/assets/` - ポスター機能用の画像アセット（手動配置）
 
@@ -279,10 +278,10 @@ python main.py
 INFO - Logged in as YourBotName (ID: 123456789)
 INFO - cogs.birthday をロードしました
 INFO - cogs.oracle をロードしました
-INFO - cogs.admin をロードしました
 INFO - cogs.lottery をロードしました
 INFO - cogs.poster をロードしました
-INFO - ギルド 123456789 に X 個のスラッシュコマンドを同期しました
+INFO - cogs.quotes をロードしました
+INFO - スラッシュコマンド同期完了: X個
 ```
 
 ### トラブルシューティング
@@ -310,7 +309,7 @@ INFO - ギルド 123456789 に X 個のスラッシュコマンドを同期し�
 zircon-fun-tools/
 ├── main.py              # エントリーポイント
 ├── config.py            # 設定管理
-├── permissions.py       # 権限管理
+├── utils.py             # ユーティリティ関数
 ├── setup_fonts.py       # フォント自動セットアップ
 ├── requirements.txt     # 依存パッケージ
 ├── .env                 # 環境変数（自分で作成）
@@ -320,11 +319,10 @@ zircon-fun-tools/
 │   ├── oracle.py        # 占い機能
 │   ├── lottery.py       # 抽選機能
 │   ├── poster.py        # ポスター生成機能
-│   ├── quotes.py        # 名言投稿機能（新規）
-│   └── admin.py         # 権限管理機能
+│   └── quotes.py        # 名言投稿機能
 ├── data/                # データファイル（自動生成）
-│   ├── birthdays.json
-│   ├── overrides.json
+│   ├── birthdays.json   # 誕生日データ
+│   ├── config.json      # 機能設定（定期投稿スケジュール等）
 │   ├── quotes.json      # 名言データ
 │   └── assets/          # 画像アセット（手動配置）
 └── test/                # テストコード
@@ -336,8 +334,8 @@ zircon-fun-tools/
 - **discord.py**: Discord Bot フレームワーク
 - **Cog システム**: 機能ごとにモジュール化
 - **環境変数管理**: `.env` + `config.py` で一元管理
-- **権限システム**: `permissions.py` で柔軟な権限制御
-- **名言機能**: CSV/単発登録・編集・削除・定期投稿（埋め込みにキャラ画像・名前）
+- **ランタイム設定**: `data/config.json` で定期投稿スケジュール等を永続化
+- **名言機能**: CSV/JSON で一括登録・定期投稿（埋め込みにキャラ画像・名前）
 
 詳細な設計思想やコーディング規約については、`INSTRUCTIONS.md` を参照してください。
 
@@ -357,6 +355,7 @@ palkeeno
 
 ## 関連ドキュメント
 
+- `USER_GUIDE.md` - **ユーザー向けBot利用説明書（コマンド一覧・使い方・FAQ）**
 - `INSTRUCTIONS.md` - AI 向け開発ガイド（設計思想・コーディング規約）
 - `data/assets/README.md` - ポスター機能の画像アセット詳細
 - `EC2_SETUP.md` - AWS EC2 での運用ガイド
