@@ -10,20 +10,24 @@ echo "==================================================="
 echo ""
 
 # システム更新
-echo "[1/4] システムパッケージを更新しています..."
+echo "[1/5] システムパッケージを更新しています..."
 sudo apt update
 
 # Python依存関係
-echo "[2/4] Python3とpipをインストールしています..."
+echo "[2/5] Python3とpipをインストールしています..."
 sudo apt install -y python3 python3-pip
 
 # 日本語フォント
-echo "[3/4] 日本語フォントをインストールしています..."
+echo "[3/5] 日本語フォントをインストールしています..."
 sudo apt install -y fonts-noto-cjk fonts-noto-cjk-extra
 
 # フォントキャッシュ更新
-echo "[4/4] フォントキャッシュを更新しています..."
+echo "[4/5] フォントキャッシュを更新しています..."
 sudo fc-cache -fv
+
+# Chrome/ChromiumとChromeDriver（Selenium用）
+echo "[5/5] Chrome/ChromiumとChromeDriverをインストールしています..."
+sudo apt install -y chromium-browser chromium-chromedriver
 
 echo ""
 echo "==================================================="

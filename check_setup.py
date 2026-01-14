@@ -18,12 +18,16 @@ def main():
     print("=" * 60)
     print()
     
+    # プロジェクトルートを取得（環境に依存しない）
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
     all_ok = True
     
     # .env ファイルのチェック
     print("📋 環境変数ファイル")
     print("-" * 60)
-    if not check_file_exists('.env', '.env ファイル'):
+    env_path = os.path.join(script_dir, '.env')
+    if not check_file_exists(env_path, '.env ファイル'):
         print("   ⚠️  .env ファイルを作成し、必要な環境変数を設定してください")
         all_ok = False
     print()
@@ -31,13 +35,14 @@ def main():
     # 必須データファイルのチェック
     print("📁 必須データファイル")
     print("-" * 60)
-    check_file_exists('data/birthdays.json', 'birthdays.json')
+    birthdays_path = os.path.join(script_dir, 'data', 'birthdays.json')
+    check_file_exists(birthdays_path, 'birthdays.json')
     print()
     
     # ポスター機能の画像アセットチェック
     print("🖼️  ポスター機能の画像アセット (オプション)")
     print("-" * 60)
-    assets_dir = 'data/assets'
+    assets_dir = os.path.join(script_dir, 'data', 'assets')
     
     if not os.path.exists(assets_dir):
         print(f"❌ アセットディレクトリが存在しません: {assets_dir}")

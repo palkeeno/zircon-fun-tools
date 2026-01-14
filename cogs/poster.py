@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 import logging
 import traceback
 import config
+import platform
 
 import os
 import io
@@ -74,18 +75,23 @@ class Poster(commands.Cog):
                 candidates.append(os.path.join(repo_root, prefer_path))
                 candidates.append(os.path.join(repo_root, 'data', 'fonts', prefer_path))
 
-        # システムフォント候補（Windows + Linux）
-        system_fonts = [
-            # Windows
-            r"C:\Windows\Fonts\meiryo.ttc",
-            r"C:\Windows\Fonts\msgothic.ttc",
-            r"C:\Windows\Fonts\YuGothM.ttc",
-            # Linux 一般的なパス
-            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        ]
+        # システムフォント候補（環境に応じて最適化）
+        is_linux = platform.system() == "Linux"
+        if is_linux:
+            # Linux環境のフォントパス
+            system_fonts = [
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            ]
+        else:
+            # Windows環境のフォントパス
+            system_fonts = [
+                r"C:\Windows\Fonts\meiryo.ttc",
+                r"C:\Windows\Fonts\msgothic.ttc",
+                r"C:\Windows\Fonts\YuGothM.ttc",
+            ]
         candidates.extend(system_fonts)
 
         # 既存候補を試す
@@ -625,6 +631,17 @@ class Poster(commands.Cog):
                 chrome_options.add_argument('--log-level=3')  # ログレベルを抑制
                 chrome_options.add_argument('--disable-logging')  # ロギング無効化
                 chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])  # DevToolsログ抑制
+                
+                # ヘッドレスモード（ブラウザウィンドウを開かない）
+                # WindowsとLinuxの両方で同じ動作にするため
+                chrome_options.add_argument('--headless')
+                chrome_options.add_argument('--disable-gpu')  # GPU無効化（ヘッドレス環境で不要）
+                
+                # Linux環境で必要なオプション（Windowsでも動作するが、環境判定で追加）
+                is_linux = platform.system() == "Linux"
+                if is_linux:
+                    chrome_options.add_argument('--no-sandbox')  # Linux環境で必要
+                    chrome_options.add_argument('--disable-dev-shm-usage')  # 共有メモリの問題を回避
                 
                 driver = webdriver.Chrome(options=chrome_options)
                 driver.get(f"https://zircon.konami.net/nft/character/{character_id}")

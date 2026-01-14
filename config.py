@@ -121,7 +121,9 @@ POSTER_PEACEFUL_PATH = os.getenv('POSTER_PEACEFUL_PATH', os.path.join(_ASSETS_DI
 POSTER_BRAVE_PATH = os.getenv('POSTER_BRAVE_PATH', os.path.join(_ASSETS_DIR, 'brave.png'))
 POSTER_GLORY_PATH = os.getenv('POSTER_GLORY_PATH', os.path.join(_ASSETS_DIR, 'glory.png'))
 POSTER_FREEDOM_PATH = os.getenv('POSTER_FREEDOM_PATH', os.path.join(_ASSETS_DIR, 'freedom.png'))
-POSTER_DST_PATH = os.getenv('POSTER_DST_PATH', 'poster_output.png')
+# 環境に依存しないパス構築（プロジェクトルートからの相対パス）
+_POSTER_DST_DEFAULT = os.path.join(os.path.dirname(__file__), 'poster_output.png')
+POSTER_DST_PATH = os.getenv('POSTER_DST_PATH', _POSTER_DST_DEFAULT)
 POSTER_FONT_A = os.getenv('POSTER_FONT_A', 'ヒラギノ明朝 ProN.ttc')
 POSTER_FONT_B = os.getenv('POSTER_FONT_B', 'ヒラギノ明朝 ProN.ttc')
 POSTER_FONT_C = os.getenv('POSTER_FONT_C', 'ヒラギノ明朝 ProN.ttc')

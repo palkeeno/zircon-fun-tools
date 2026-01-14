@@ -294,22 +294,27 @@ class Birthday(commands.Cog):
         month = birthday_data.get("month")
         day = birthday_data.get("day")
         
+        # 環境に依存しない一時ファイルパス構築
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        temp_dir = os.path.join(repo_root, 'data', 'temp')
+        os.makedirs(temp_dir, exist_ok=True)
+        
         try:
             # 画像取得
             if character_id.isdigit() and int(character_id) <= 1000:
                 # webp形式
                 url = f"https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.webp"
-                temp_path = f"temp_{character_id}.webp"
+                temp_path = os.path.join(temp_dir, f"temp_{character_id}.webp")
                 urllib.request.urlretrieve(url, temp_path)
                 img = Image.open(temp_path)
                 img = img.convert('RGB')
-                png_path = f"temp_{character_id}.png"
+                png_path = os.path.join(temp_dir, f"temp_{character_id}.png")
                 img.save(png_path, 'PNG')
                 os.remove(temp_path)
             else:
                 # png形式
                 url = f"https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.png"
-                png_path = f"temp_{character_id}.png"
+                png_path = os.path.join(temp_dir, f"temp_{character_id}.png")
                 urllib.request.urlretrieve(url, png_path)
             
             # Embed作成
@@ -337,12 +342,17 @@ class Birthday(commands.Cog):
 
     def load_birthdays(self):
         """誕生日データを読み込みます（リスト形式）。dataフォルダがなければ作成。"""
-        os.makedirs("data", exist_ok=True)
+        # 環境に依存しないパス構築
+        data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+        data_dir = os.path.abspath(data_dir)
+        birthdays_path = os.path.join(data_dir, 'birthdays.json')
+        
+        os.makedirs(data_dir, exist_ok=True)
         try:
-            if not os.path.exists("data/birthdays.json"):
-                with open("data/birthdays.json", "w", encoding="utf-8") as f:
+            if not os.path.exists(birthdays_path):
+                with open(birthdays_path, "w", encoding="utf-8") as f:
                     json.dump([], f, ensure_ascii=False, indent=2)
-            with open("data/birthdays.json", "r", encoding="utf-8") as f:
+            with open(birthdays_path, "r", encoding="utf-8") as f:
                 self.birthdays = json.load(f)
                 if not isinstance(self.birthdays, list):
                     self.birthdays = []
@@ -353,9 +363,14 @@ class Birthday(commands.Cog):
 
     def save_birthdays(self):
         """誕生日データを保存します（リスト形式）。dataフォルダがなければ作成。"""
-        os.makedirs("data", exist_ok=True)
+        # 環境に依存しないパス構築
+        data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+        data_dir = os.path.abspath(data_dir)
+        birthdays_path = os.path.join(data_dir, 'birthdays.json')
+        
+        os.makedirs(data_dir, exist_ok=True)
         try:
-            with open("data/birthdays.json", "w", encoding="utf-8") as f:
+            with open(birthdays_path, "w", encoding="utf-8") as f:
                 json.dump(self.birthdays, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"Error saving birthdays: {e}")

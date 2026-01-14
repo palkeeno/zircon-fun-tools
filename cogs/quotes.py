@@ -28,7 +28,9 @@ except ImportError:  # pragma: no cover - fallback for environments without zone
 logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEZONE = "Asia/Tokyo"
-_DATA_DIR = "data"
+# 環境に依存しないパス構築
+_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
+_DATA_DIR = os.path.abspath(_DATA_DIR)
 _DEFAULT_DATA_PATH = os.path.join(_DATA_DIR, "quotes.json")
 _ITEMS_PER_PAGE = 10
 

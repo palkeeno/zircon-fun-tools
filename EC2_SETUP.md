@@ -16,6 +16,7 @@ chmod +x setup_ec2.sh
 - Python3とpipのインストール
 - 日本語フォント（Noto CJK）のインストール
 - フォントキャッシュの更新
+- Chrome/ChromiumとChromeDriverのインストール（Selenium用）
 
 ### 2. 手動セットアップ
 
@@ -36,15 +37,46 @@ sudo fc-cache -fv
 
 # フォント確認
 fc-list :lang=ja | head -5
+
+# Chrome/ChromiumとChromeDriver（Selenium用）
+sudo apt install -y chromium-browser chromium-chromedriver
+
+# または、Google Chromeを使用する場合
+# wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+# echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+# sudo apt update
+# sudo apt install -y google-chrome-stable
 ```
 
-### 3. Pythonパッケージのインストール
+### 3. Chrome/ChromiumとChromeDriverのインストール（Selenium用）
+
+`poster`コマンドでWebスクレイピングを行うため、Chrome/ChromiumとChromeDriverが必要です。
+
+```bash
+# Chromium（推奨、軽量）
+sudo apt install -y chromium-browser chromium-chromedriver
+
+# または、Google Chromeを使用する場合
+wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+sudo apt update
+sudo apt install -y google-chrome-stable
+
+# ChromeDriverのパス確認（必要に応じて）
+which chromedriver
+# または
+which google-chrome-stable
+```
+
+**注意**: Selenium 4.6以降では、ChromeDriverを自動的にダウンロード・管理する機能がありますが、システムにインストールされたChromeDriverを使用することもできます。
+
+### 4. Pythonパッケージのインストール
 
 ```bash
 pip3 install -r requirements.txt
 ```
 
-### 4. 環境変数の設定
+### 5. 環境変数の設定
 
 `.env`ファイルを作成・編集：
 
@@ -57,7 +89,7 @@ nano .env
 - `DISCORD_TOKEN_PROD`: 本番用Discordボットトークン
 - その他、各機能の設定
 
-### 5. ボットの起動
+### 6. ボットの起動
 
 ```bash
 # 通常起動
