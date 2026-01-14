@@ -100,8 +100,6 @@ class Quotes(commands.Cog):
             return interaction.guild.get_member(interaction.user.id)
         return None
 
-
-
     def _ensure_data_dir(self) -> None:
         os.makedirs(os.path.dirname(self.data_path) or ".", exist_ok=True)
 
@@ -304,14 +302,6 @@ class Quotes(commands.Cog):
             await interaction.response.send_message("名言はまだ登録されていません。", ephemeral=True)
             return
 
-        # Simple random 10 or latest 10? The previous implementation had pagination.
-        # Let's support 10 items for now or re-implement pagination logic if crucial.
-        # User asked to consolidate commands.
-        # For simple consolidation, let's show first 10 items or basic pagination if we want to be fancy.
-        # Given the "list" command had page arg, we can support pagination via buttons if we really wanted to,
-        # but to keep it simple and within the "single command" paradigm without complex optional args for pages:
-        # Just show 1-10.
-        
         embed = discord.Embed(
             title="📝 名言一覧",
             description=f"登録数: {total} 件",
@@ -360,7 +350,7 @@ class Quotes(commands.Cog):
     @app_commands.command(name="quote_update", description="ファイルから名言データを一括更新します（全置換）")
     @app_commands.describe(file="更新用ファイル（CSV/JSON）")
     async def quote_update(self, interaction: discord.Interaction, file: discord.Attachment):
-        """CSVファイルから名言を一括更新（全置換）します。"""
+        """CSV/JSONファイルから名言を一括更新（全置換）します。"""
 
         await interaction.response.defer(ephemeral=True)
         try:

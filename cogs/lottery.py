@@ -115,8 +115,6 @@ class Lottery(commands.Cog):
         self.bot = bot
         logger.info("Lottery が初期化されました")
 
-    # _is_operator removed
-
 
     @app_commands.command(name="lottery", description="指定ロールから人数分を抽選して順に発表します")
     @app_commands.describe(
@@ -210,7 +208,7 @@ class Lottery(commands.Cog):
                 view = NextLotteryView(interaction.user.id)
                 next_msg = await send_target("管理者が「Next」ボタンを押すと次の抽選を開始します。", view=view)
                 
-                # ボタンが押されるまで待機（タイムアウト: 300秒）
+                # ボタンが押されるまで待機（タイムアウト: 900秒 = 15分）
                 await view.wait()
                 
                 if view.value is None:

@@ -1,6 +1,5 @@
 """
 誕生日管理のコグ
-このモジュールは、誕生日の管理機能を提供します。
 """
 
 import discord
@@ -88,10 +87,7 @@ class BirthdayPaginationView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
 class Birthday(commands.Cog):
-    """
-    誕生日管理のコグ
-    誕生日の管理機能を提供します。
-    """
+    """誕生日管理のコグ"""
     
     def __init__(self, bot: commands.Bot):
         """
@@ -406,8 +402,6 @@ class Birthday(commands.Cog):
         if len(data) > 10:
             embed.set_footer(text=f"※ 表示件数制限のため先頭10件のみ表示しています。")
             
-        # 既にresponseが返されているかどうかのチェックが必要だが、
-        # 今回は分岐で呼んでいるので大丈夫なはず
         if not interaction.response.is_done():
             await interaction.response.send_message(embed=embed)
         else:

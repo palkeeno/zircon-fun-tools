@@ -104,7 +104,6 @@ async def main():
     except KeyboardInterrupt:
         logger.info('停止要求を受信しました (Ctrl+C). 終了します。')
     finally:
-        # Place any cleanup here if needed
         pass
 
 if __name__ == '__main__':

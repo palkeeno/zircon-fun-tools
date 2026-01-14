@@ -319,7 +319,7 @@ class Poster(commands.Cog):
             ]
             self._draw_text_with_glow(draw, name, x_center, y_pos, font_name, glow_layers)
         
-        # 5. 目標（goal）を領域中央揃えで配置（850, 1500）から（1550, 2050）
+        # 目標（goal）を領域中央揃えで配置（850, 1500）から（1550, 2050）
         goal = info.get('goal', '')
         if goal:
             # 領域定義
@@ -328,7 +328,7 @@ class Poster(commands.Cog):
             goal_width = goal_x_right - goal_x_left
             goal_height = goal_y_bottom - goal_y_top
             
-            # 最大120pxから順にサイズを試して、領域に収まる最大サイズを見つける
+            # 最大80pxから順にサイズを試して、領域に収まる最大サイズを見つける
             best_font = None
             best_lines = []
             best_total_height = 0
@@ -418,7 +418,7 @@ class Poster(commands.Cog):
 
                 y_current += best_line_height
         
-        # 9. その他の情報をテーブル形式で配置（50, 1500）から（800, 2100）
+        # その他の情報をテーブル形式で配置（50, 1500）から（800, 2100）
         info_items = [
             ('スキル', info.get('skill', '')),
             ('センスタイプ', info.get('sencetype', '')),
@@ -530,7 +530,7 @@ class Poster(commands.Cog):
                       (x_start + label_width, y_pos + row_height - 5)],
                      fill=(255, 255, 255), width=2)
         
-        # 8. 国旗画像の配置（900,900）を左上として横幅300pxで配置
+        # 国旗画像の配置（1200, 1200）を左上として横幅300pxで配置
         # 最終レイヤー: すべての要素の上に重ねる
         if flag_img:
             try:
@@ -542,7 +542,7 @@ class Poster(commands.Cog):
                 new_size = (target_width, new_height)
                 flag_resized = flag_img.resize(new_size, Image.Resampling.LANCZOS)
                 
-                # 左上が(900, 900)となるように配置
+                # 左上が(1200, 1200)となるように配置
                 flag_x = 1200
                 flag_y = 1200
                 

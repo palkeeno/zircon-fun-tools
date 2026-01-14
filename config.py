@@ -9,18 +9,15 @@ import logging
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
-# ロギングの設定
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 環境変数の読み込み
 try:
     load_dotenv()
 except Exception as e:
     logger.error(f".envファイルの読み込みに失敗しました: {e}")
     raise
 
-# 環境設定
 ENV = os.getenv('ENV', 'development')  # デフォルトは開発環境
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
@@ -83,7 +80,6 @@ def set_runtime_section(section: str, values: Dict[str, Any]) -> Dict[str, Any]:
     _save_runtime_config(payload)
     return dict(values)
 
-# Discordボットの設定
 
 def get_token():
     """
@@ -100,7 +96,6 @@ def get_token():
 
 TOKEN = get_token()
 
-# 管理者チャンネルの設定
 ADMIN_CHANNEL_ID = int(os.getenv('ADMIN_CHANNEL_ID_DEV' if ENV == 'development' else 'ADMIN_CHANNEL_ID_PROD', 0))
 if not ADMIN_CHANNEL_ID:
     logger.warning("管理者チャンネルIDが設定されていません。管理者コマンドは使用できません。")
@@ -110,7 +105,6 @@ if not ADMIN_CHANNEL_ID:
 # 未設定(0)の場合はグローバル同期のみとなり、反映まで最大1時間かかることがあります。
 GUILD_ID = int(os.getenv('GUILD_ID_DEV' if ENV == 'development' else 'GUILD_ID_PROD', '0'))
 
-# Birthday機能の設定
 BIRTHDAY_CHANNEL_ID = int(os.getenv('BIRTHDAY_CHANNEL_ID_DEV' if ENV == 'development' else 'BIRTHDAY_CHANNEL_ID_PROD', '0'))
 
 # Posterコマンド用の画像・フォント・チャンネル設定
@@ -130,10 +124,8 @@ POSTER_FONT_C = os.getenv('POSTER_FONT_C', 'ヒラギノ明朝 ProN.ttc')
 POSTER_FONT_D = os.getenv('POSTER_FONT_D', 'ヒラギノ明朝 ProN.ttc')
 POSTER_CHANNEL_ID = int(os.getenv('POSTER_CHANNEL_ID', '0'))
 
-# Quotes 機能の設定
 QUOTE_CHANNEL_ID = _safe_int(os.getenv('QUOTE_CHANNEL_ID_DEV' if ENV == 'development' else 'QUOTE_CHANNEL_ID_PROD', '0'), 0)
 
-# 機能の設定
 FEATURES = {
     "birthday": {
         "settings": {

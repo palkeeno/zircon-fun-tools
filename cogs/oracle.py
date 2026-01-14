@@ -1,6 +1,5 @@
 """
 選択肢アドバイス機能を実装するCog
-このモジュールは、選択肢アドバイス機能を提供します。
 """
 
 import discord
@@ -15,9 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Oracle(commands.Cog):
-    """
-    選択肢アドバイス機能を提供するCog
-    """
+    """選択肢アドバイス機能を提供するCog"""
     
     def __init__(self, bot: commands.Bot):
         """
@@ -39,8 +36,6 @@ class Oracle(commands.Cog):
             choices (int): 選択肢の数
         """
         try:
-
-
             # 選択肢の数のバリデーション
             if choices < 1:
                 await interaction.response.send_message(
@@ -50,7 +45,6 @@ class Oracle(commands.Cog):
                 return
 
             # 最初の案内メッセージを送信
-
             await interaction.response.send_message(
                 f"{choices}個の選択肢から占います...",
                 ephemeral=False
