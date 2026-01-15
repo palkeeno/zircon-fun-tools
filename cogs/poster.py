@@ -5,7 +5,11 @@ import urllib.request
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-import time
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from PIL import Image, ImageDraw, ImageFont
 import logging
 import traceback
@@ -632,6 +636,13 @@ class Poster(commands.Cog):
                 chrome_options.add_argument('--headless')
                 chrome_options.add_argument('--disable-gpu')  # GPU無効化（ヘッドレス環境で不要）
                 
+                # メモリ管理オプション（EC2等の小規模インスタンス向け）
+                chrome_options.add_argument('--disable-extensions')  # 拡張機能無効化
+                chrome_options.add_argument('--disable-plugins')  # プラグイン無効化
+                chrome_options.add_argument('--disable-images')  # 画像読み込み無効化（高速化）
+                chrome_options.add_argument('--single-process')  # シングルプロセスモード（メモリ節約）
+                chrome_options.add_argument('--disable-software-rasterizer')  # ソフトウェアラスタライザ無効化
+                
                 # Linux環境で必要なオプション（Windowsでも動作するが、環境判定で追加）
                 is_linux = platform.system() == "Linux"
                 if is_linux:
@@ -639,8 +650,23 @@ class Poster(commands.Cog):
                     chrome_options.add_argument('--disable-dev-shm-usage')  # 共有メモリの問題を回避
                 
                 driver = webdriver.Chrome(options=chrome_options)
+                
+                # タイムアウト設定（リソース枯渇防止）
+                driver.set_page_load_timeout(30)  # ページ読み込みタイムアウト
+                driver.set_script_timeout(30)  # スクリプト実行タイムアウト
+                driver.implicitly_wait(5)  # 暗黙的待機
+                
                 driver.get(f"https://zircon.konami.net/nft/character/{character_id}")
-                time.sleep(3)
+                
+                # WebDriverWaitで要素の読み込みを待機（time.sleepより効率的）
+                try:
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "#root > main > div > section.status"))
+                    )
+                except TimeoutException:
+                    logger.warning(f"ページ読み込みタイムアウト: character_id={character_id}")
+                    # タイムアウトでも続行を試みる
+                
                 html = driver.page_source.encode("utf-8")
                 soup = BeautifulSoup(html, "html.parser")
                 selectors = {
