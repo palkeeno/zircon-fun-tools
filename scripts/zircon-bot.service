@@ -1,0 +1,41 @@
+[Unit]
+Description=Zircon Fun Tools Discord Bot
+Documentation=https://github.com/palkeeno/zircon-fun-tools
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/zircon-fun-tools
+
+# 環境設定
+Environment="ENV=production"
+Environment="PYTHONUNBUFFERED=1"
+
+# 起動コマンド
+ExecStart=/usr/bin/python3 /home/ubuntu/zircon-fun-tools/main.py
+
+# 自動再起動設定
+Restart=always
+RestartSec=10
+# 1分間に5回以上再起動した場合は停止
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# リソース制限（小規模インスタンス向け）
+# MemoryMax=512M
+# CPUQuota=80%
+
+# ログ設定
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zircon-bot
+
+# セキュリティ設定
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

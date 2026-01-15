@@ -199,38 +199,39 @@ crontab -e
 pkill -f "watchdog.sh"
 ```
 
-## systemdサービス設定（推奨）
+## systemdサービス設定（最も推奨）
 
-### サービスファイルの作成
+systemdを使用すると、watchdogスクリプトよりも信頼性の高い自動再起動が可能です。
+
+### サービスファイルのインストール
+
+プロジェクトに含まれるサービスファイルをコピーします：
 
 ```bash
+# サービスファイルをコピー
+sudo cp scripts/zircon-bot.service /etc/systemd/system/
+
+# 必要に応じてユーザー名やパスを編集
 sudo nano /etc/systemd/system/zircon-bot.service
+
+# systemdをリロード
+sudo systemctl daemon-reload
 ```
 
-以下の内容を記述：
+### サービスファイルの内容
 
-```ini
-[Unit]
-Description=Zircon Fun Tools Discord Bot
-After=network.target
+`scripts/zircon-bot.service` には以下の機能が含まれています：
 
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/zircon-fun-tools
-Environment="ENV=production"
-ExecStart=/usr/bin/python3 /home/ubuntu/zircon-fun-tools/main.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
+- ネットワーク接続後に起動
+- 異常終了時の自動再起動（10秒後）
+- 1分間に5回以上再起動した場合は停止（無限ループ防止）
+- journalへのログ出力
+- セキュリティ設定（NoNewPrivileges, PrivateTmp）
 
 ### サービスの有効化と起動
 
 ```bash
-# サービスを有効化
+# サービスを有効化（システム起動時に自動起動）
 sudo systemctl enable zircon-bot.service
 
 # サービスを起動
@@ -239,7 +240,7 @@ sudo systemctl start zircon-bot.service
 # ステータス確認
 sudo systemctl status zircon-bot.service
 
-# ログ確認
+# ログ確認（リアルタイム）
 sudo journalctl -u zircon-bot.service -f
 ```
 
@@ -252,9 +253,27 @@ sudo systemctl stop zircon-bot.service
 # 再起動
 sudo systemctl restart zircon-bot.service
 
-# ログ表示
+# ログ表示（最新100行）
 sudo journalctl -u zircon-bot.service --lines=100
+
+# 今日のログのみ表示
+sudo journalctl -u zircon-bot.service --since today
+
+# エラーログのみ表示
+sudo journalctl -u zircon-bot.service -p err
 ```
+
+### systemd vs watchdog
+
+| 項目 | systemd | watchdog.sh |
+|------|---------|-------------|
+| 信頼性 | ◎ OS標準 | ○ スクリプト依存 |
+| 自動再起動 | ◎ 組み込み機能 | ○ cronで実現 |
+| ログ管理 | ◎ journalctl | △ 独自ログ |
+| セキュリティ | ◎ サンドボックス可 | △ なし |
+| 設定の複雑さ | △ やや複雑 | ○ シンプル |
+
+**推奨**: 本番環境ではsystemdを使用し、watchdogは開発・テスト用に使用してください。
 
 ## フォント関連のトラブルシューティング
 
