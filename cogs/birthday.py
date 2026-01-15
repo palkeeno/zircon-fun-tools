@@ -10,6 +10,7 @@ import logging
 import traceback
 import datetime
 import os
+import tempfile
 import config
 import utils
 
@@ -243,28 +244,32 @@ class Birthday(commands.Cog):
         month = birthday_data.get("month")
         day = birthday_data.get("day")
         
-        # 環境に依存しない一時ファイルパス構築
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        temp_dir = os.path.join(repo_root, 'data', 'temp')
-        os.makedirs(temp_dir, exist_ok=True)
+        # tempfileを使用して安全な一時ファイル管理
+        temp_webp_path = None
+        temp_png_path = None
         
         try:
             # 画像取得
             if character_id.isdigit() and int(character_id) <= 1000:
                 # webp形式
                 url = f"https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.webp"
-                temp_path = os.path.join(temp_dir, f"temp_{character_id}.webp")
-                urllib.request.urlretrieve(url, temp_path)
-                img = Image.open(temp_path)
+                # 一時ファイル作成（自動削除は無効化、手動で削除）
+                fd, temp_webp_path = tempfile.mkstemp(suffix='.webp', prefix=f'birthday_{character_id}_')
+                os.close(fd)  # ファイルディスクリプタを閉じる
+                urllib.request.urlretrieve(url, temp_webp_path)
+                img = Image.open(temp_webp_path)
                 img = img.convert('RGB')
-                png_path = os.path.join(temp_dir, f"temp_{character_id}.png")
-                img.save(png_path, 'PNG')
-                os.remove(temp_path)
+                
+                fd, temp_png_path = tempfile.mkstemp(suffix='.png', prefix=f'birthday_{character_id}_')
+                os.close(fd)
+                img.save(temp_png_path, 'PNG')
+                img.close()
             else:
                 # png形式
                 url = f"https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.png"
-                png_path = os.path.join(temp_dir, f"temp_{character_id}.png")
-                urllib.request.urlretrieve(url, png_path)
+                fd, temp_png_path = tempfile.mkstemp(suffix='.png', prefix=f'birthday_{character_id}_')
+                os.close(fd)
+                urllib.request.urlretrieve(url, temp_png_path)
             
             # Embed作成
             embed = discord.Embed(
@@ -277,17 +282,22 @@ class Birthday(commands.Cog):
             embed.set_footer(text=f"Zirconキャラクター")
             
             # 画像をアップロードしてサムネイルに設定
-            with open(png_path, 'rb') as f:
+            with open(temp_png_path, 'rb') as f:
                 file = discord.File(f, filename=f"{character_id}.png")
                 embed.set_thumbnail(url=f"attachment://{character_id}.png")
                 await channel.send(embed=embed, file=file)
             
-            # 一時ファイル削除
-            os.remove(png_path)
-            
         except Exception as e:
             logger.error(f"Error in _announce_zircon_birthday: {e}")
             logger.error(traceback.format_exc())
+        finally:
+            # 一時ファイルの確実なクリーンアップ
+            for path in [temp_webp_path, temp_png_path]:
+                if path and os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except Exception as cleanup_error:
+                        logger.warning(f"一時ファイルの削除に失敗: {path}, {cleanup_error}")
 
     def load_birthdays(self):
         """誕生日データを読み込みます（リスト形式）。dataフォルダがなければ作成。"""

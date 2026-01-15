@@ -306,12 +306,37 @@ pip3 install --upgrade -r requirements.txt
 
 ## 監視とメンテナンス
 
-### ログのローテーション
+### ログのローテーション（自動化推奨）
+
+ログファイルの肥大化を防ぐため、自動クリーンアップを設定してください。
+
+#### 方法1: cronによる自動クリーンアップ（推奨）
+
+```bash
+# セットアップスクリプトを実行
+./scripts/setup_cron.sh
+```
+
+これにより以下が設定されます：
+- 5分ごとのBot監視と自動再起動
+- 毎日午前3時に7日以上前のログファイルを自動削除
+
+#### 方法2: 手動でログを削除
+
+```bash
+# 古いログを削除
+./scripts/view_logs.sh clean
+
+# または cleanup_logs.sh を直接実行（日数指定可能）
+./scripts/cleanup_logs.sh 14  # 14日以上前を削除
+```
+
+#### 方法3: logrotateを使用
 
 `/etc/logrotate.d/zircon-bot` を作成：
 
 ```
-/home/ubuntu/zircon-fun-tools/bot.log {
+/home/ubuntu/zircon-fun-tools/logs/*.log {
     daily
     rotate 7
     compress
@@ -320,6 +345,15 @@ pip3 install --upgrade -r requirements.txt
     create 644 ubuntu ubuntu
 }
 ```
+
+### クリーンアップスクリプトの機能
+
+`scripts/cleanup_logs.sh` は以下を実行します：
+- 指定日数（デフォルト7日）以上前の `bot_*.log` ファイルを削除
+- `cron.log` が10MB超の場合、最新1000行に切り詰め
+- `watchdog.log` が5MB超の場合、最新500行に切り詰め
+- `crash.log` が5MB超の場合、最新1000行に切り詰め
+- 空のログファイルを削除
 
 ### リソース監視
 

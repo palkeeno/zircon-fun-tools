@@ -97,9 +97,8 @@ case "$1" in
         du -sh "$LOG_DIR" 2>/dev/null
         ;;
     "clean")
-        echo "Cleaning logs older than 7 days..."
-        DELETED=$(find "$LOG_DIR" -name "*.log" -mtime +7 -delete -print | wc -l)
-        echo "Deleted $DELETED log file(s)."
+        echo "Running log cleanup script..."
+        "$SCRIPT_DIR/cleanup_logs.sh"
         ;;
     *)
         show_help
