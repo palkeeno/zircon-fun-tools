@@ -9,6 +9,7 @@ import logging
 import traceback
 import sys
 import asyncio
+import time
 import setup_fonts
 
 logging.basicConfig(
@@ -16,6 +17,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# 再接続設定
+MAX_RETRIES = 5  # 最大再試行回数
+RETRY_DELAY_BASE = 30  # 基本待機時間（秒）
+RETRY_DELAY_MAX = 300  # 最大待機時間（秒）
 
 # Font setup (Linux only)
 setup_fonts.setup_fonts_if_needed()
@@ -107,15 +113,51 @@ async def main():
         pass
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except discord.LoginFailure:
-        logger.error('Invalid token provided. Please check your token in the .env file.')
-        sys.exit(1)
-    except KeyboardInterrupt:
-        logger.info('停止しました。')
-        sys.exit(0)
-    except Exception as e:
-        logger.error(f'Unexpected error: {e}')
-        logger.error(traceback.format_exc())
-        sys.exit(1)
+    retry_count = 0
+    
+    while retry_count < MAX_RETRIES:
+        try:
+            # Botインスタンスを再作成（再試行時）
+            if retry_count > 0:
+                logger.info(f"Botインスタンスを再作成します (試行 {retry_count + 1}/{MAX_RETRIES})")
+                bot = FunToolsBot()
+            
+            asyncio.run(main())
+            break  # 正常終了した場合はループを抜ける
+            
+        except discord.LoginFailure:
+            logger.error('無効なトークンです。.envファイルを確認してください。')
+            sys.exit(1)  # トークンエラーは再試行しない
+            
+        except KeyboardInterrupt:
+            logger.info('停止しました。')
+            sys.exit(0)
+            
+        except (discord.ConnectionClosed, discord.GatewayNotFound, 
+                discord.HTTPException, OSError) as e:
+            # ネットワーク関連エラーは再試行
+            retry_count += 1
+            delay = min(RETRY_DELAY_BASE * retry_count, RETRY_DELAY_MAX)
+            
+            logger.warning(f'接続エラーが発生しました: {e}')
+            
+            if retry_count < MAX_RETRIES:
+                logger.info(f'{delay}秒後に再接続を試みます (試行 {retry_count}/{MAX_RETRIES})')
+                time.sleep(delay)
+            else:
+                logger.error(f'最大再試行回数 ({MAX_RETRIES}) に達しました。終了します。')
+                sys.exit(1)
+                
+        except Exception as e:
+            retry_count += 1
+            delay = min(RETRY_DELAY_BASE * retry_count, RETRY_DELAY_MAX)
+            
+            logger.error(f'予期しないエラー: {e}')
+            logger.error(traceback.format_exc())
+            
+            if retry_count < MAX_RETRIES:
+                logger.info(f'{delay}秒後に再起動を試みます (試行 {retry_count}/{MAX_RETRIES})')
+                time.sleep(delay)
+            else:
+                logger.error(f'最大再試行回数 ({MAX_RETRIES}) に達しました。終了します。')
+                sys.exit(1)
