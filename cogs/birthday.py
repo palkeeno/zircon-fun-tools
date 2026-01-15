@@ -2,6 +2,7 @@
 誕生日管理のコグ
 """
 
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -103,6 +104,7 @@ class Birthday(commands.Cog):
         self.defaults: Dict[str, Any] = self._feature_defaults()
         self.settings: Dict[str, Any] = {}
         self.birthday_task_started = False
+        self._data_lock = asyncio.Lock()  # JSONファイルの排他制御用ロック
         self.load_birthdays()
         self._load_settings()
         self._refresh_daily_flags(datetime.datetime.now(self.tz))
@@ -233,7 +235,7 @@ class Birthday(commands.Cog):
             announced_any = True
 
         if announced_any:
-            self.save_birthdays()
+            await self.save_birthdays_async()
 
         return announced_any
 
@@ -249,10 +251,13 @@ class Birthday(commands.Cog):
         temp_png_path = None
         
         try:
+            # 画像URLを取得（config.pyで一元管理）
+            url = config.get_character_image_url(character_id)
+            is_webp = url.endswith('.webp')
+            
             # 画像取得
-            if character_id.isdigit() and int(character_id) <= 1000:
+            if is_webp:
                 # webp形式
-                url = f"https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.webp"
                 # 一時ファイル作成（自動削除は無効化、手動で削除）
                 fd, temp_webp_path = tempfile.mkstemp(suffix='.webp', prefix=f'birthday_{character_id}_')
                 os.close(fd)  # ファイルディスクリプタを閉じる
@@ -266,7 +271,6 @@ class Birthday(commands.Cog):
                 img.close()
             else:
                 # png形式
-                url = f"https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.png"
                 fd, temp_png_path = tempfile.mkstemp(suffix='.png', prefix=f'birthday_{character_id}_')
                 os.close(fd)
                 urllib.request.urlretrieve(url, temp_png_path)
@@ -321,7 +325,10 @@ class Birthday(commands.Cog):
             self.birthdays = []
 
     def save_birthdays(self):
-        """誕生日データを保存します（リスト形式）。dataフォルダがなければ作成。"""
+        """誕生日データを保存します（リスト形式）。dataフォルダがなければ作成。
+        
+        Note: 非同期コンテキストから呼び出す場合はsave_birthdays_async()を使用してください。
+        """
         # 環境に依存しないパス構築
         data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
         data_dir = os.path.abspath(data_dir)
@@ -334,6 +341,11 @@ class Birthday(commands.Cog):
         except Exception as e:
             logger.error(f"Error saving birthdays: {e}")
             logger.error(traceback.format_exc())
+
+    async def save_birthdays_async(self):
+        """誕生日データを非同期で保存します（ロック付き）。"""
+        async with self._data_lock:
+            self.save_birthdays()
 
     @app_commands.command(name="birthday", description="誕生日の確認（一覧表示または検索）")
     @app_commands.describe(id_or_name="検索したいキャラクターIDまたは名前（指定しない場合は一覧表示）")
@@ -510,8 +522,9 @@ class Birthday(commands.Cog):
                 except:
                     continue
             
-            self.birthdays = validated
-            self.save_birthdays()
+            async with self._data_lock:
+                self.birthdays = validated
+                self.save_birthdays()
             
             await interaction.followup.send(f"誕生日データを全置換しました。({len(self.birthdays)} 件)", ephemeral=True)
 

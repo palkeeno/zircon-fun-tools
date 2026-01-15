@@ -23,6 +23,56 @@ ENV = os.getenv('ENV', 'development')  # デフォルトは開発環境
 _DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 _RUNTIME_CONFIG_PATH = os.path.join(_DATA_DIR, 'config.json')
 
+# =============================================================================
+# 外部URL設定（一元管理）
+# 外部サービスのURLが変更された場合、ここを修正するだけで対応可能
+# =============================================================================
+
+# Zircon画像ストレージのベースURL
+ZIRCON_IMAGE_BASE_URL = os.getenv(
+    'ZIRCON_IMAGE_BASE_URL',
+    'https://storage.googleapis.com/prd-azz-image'
+)
+
+# Zirconキャラクターページの基本URL
+ZIRCON_CHARACTER_PAGE_URL = os.getenv(
+    'ZIRCON_CHARACTER_PAGE_URL',
+    'https://zircon.konami.net/nft/character'
+)
+
+
+def get_character_image_url(character_id: str) -> str:
+    """
+    キャラクターIDから画像URLを生成します。
+    
+    Args:
+        character_id: キャラクターID
+        
+    Returns:
+        str: 画像URL（webpまたはpng形式）
+    """
+    cid = str(character_id).strip()
+    # 4桁以下のIDはwebp形式、それ以外はpng形式
+    if cid.isdigit() and len(cid) <= 4:
+        return f"{ZIRCON_IMAGE_BASE_URL}/pfp_{cid}.webp"
+    return f"{ZIRCON_IMAGE_BASE_URL}/pfp_{cid}.png"
+
+
+def get_character_page_url(character_id: str) -> str:
+    """
+    キャラクターIDからキャラクターページURLを生成します。
+    
+    Args:
+        character_id: キャラクターID
+        
+    Returns:
+        str: キャラクターページURL
+    """
+    return f"{ZIRCON_CHARACTER_PAGE_URL}/{character_id}"
+
+
+# =============================================================================
+
 
 def _safe_int(value: Optional[str], default: int) -> int:
     """環境変数を整数として解釈し、失敗時はデフォルト値を返す。"""

@@ -593,11 +593,8 @@ class Poster(commands.Cog):
         )
         driver = None
         try:
-            # キャラ画像URL取得
-            if len(character_id) <= 4:
-                url = f"https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.webp"
-            else:
-                url = f"https://storage.googleapis.com/prd-azz-image/pfp_{character_id}.png"
+            # キャラ画像URL取得（config.pyで一元管理）
+            url = config.get_character_image_url(character_id)
             try:
                 urllib.request.urlretrieve(url, self.dst_path)
             except Exception as e:
@@ -627,7 +624,6 @@ class Poster(commands.Cog):
             try:
                 # ChromeDriverのオプションを設定（ログ抑制）
                 chrome_options = Options()
-                chrome_options.add_argument('--log-level=3')  # ログレベルを抑制
                 chrome_options.add_argument('--disable-logging')  # ロギング無効化
                 chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])  # DevToolsログ抑制
                 
@@ -656,7 +652,9 @@ class Poster(commands.Cog):
                 driver.set_script_timeout(30)  # スクリプト実行タイムアウト
                 driver.implicitly_wait(5)  # 暗黙的待機
                 
-                driver.get(f"https://zircon.konami.net/nft/character/{character_id}")
+                # キャラクターページURL（config.pyで一元管理）
+                character_page_url = config.get_character_page_url(character_id)
+                driver.get(character_page_url)
                 
                 # WebDriverWaitで要素の読み込みを待機（time.sleepより効率的）
                 try:

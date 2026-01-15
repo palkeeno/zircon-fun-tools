@@ -177,12 +177,11 @@ class Quotes(commands.Cog):
         return next_run
 
     def _build_thumbnail_url(self, character_id: str) -> str:
+        """キャラクター画像URLを取得（config.pyで一元管理）"""
         cid = character_id.strip()
         if not cid:
             return ""
-        if len(cid) <= 4:
-            return f"https://storage.googleapis.com/prd-azz-image/pfp_{cid}.webp"
-        return f"https://storage.googleapis.com/prd-azz-image/pfp_{cid}.png"
+        return config.get_character_image_url(cid)
 
     def _select_quote(self) -> Optional[Dict]:
         if not self.quotes:
@@ -202,7 +201,8 @@ class Quotes(commands.Cog):
         character_id = quote.get("character_id")
         quote_id = quote.get("id", "")
         if character_id:
-            embed.url = f"https://zircon.konami.net/nft/character/{character_id}"
+            # キャラクターページURL（config.pyで一元管理）
+            embed.url = config.get_character_page_url(str(character_id))
             embed.set_thumbnail(url=self._build_thumbnail_url(str(character_id)))
             footer = f"#{character_id} · quote_id:{quote_id}"
         else:
