@@ -345,6 +345,26 @@ zircon-fun-tools/
 - エラー発生時は適切なエラーメッセージが表示されます
 - トークンが無効な場合は起動時にエラーを表示
 
+## サーバー運用（自動再起動）
+
+本番サーバーでBotを運用する場合、`scripts/` ディレクトリのスクリプトを使用して自動再起動を設定できます：
+
+```bash
+# スクリプトに実行権限を付与
+chmod +x scripts/*.sh
+
+# Botを起動
+./scripts/start_bot.sh
+
+# 状態確認
+./scripts/check_bot.sh
+
+# 自動再起動（watchdog）をバックグラウンドで起動
+nohup ./scripts/watchdog.sh &
+```
+
+詳細は `EC2_SETUP.md` の「自動再起動の設定」セクションを参照してください。
+
 ## ライセンス
 
 MIT License

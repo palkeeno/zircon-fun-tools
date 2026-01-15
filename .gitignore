@@ -44,6 +44,12 @@ data/birthdays.json
 data/quotes.json
 data/config.json
 
+# Logs and PID files
+logs/
+!logs/README.md
+bot.pid
+*.log
+
 # Poster Assets (large image files)
 data/assets/*.png
 data/assets/*.jpg

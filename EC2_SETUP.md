@@ -98,8 +98,105 @@ python3 main.py
 # バックグラウンド起動（推奨）
 nohup python3 main.py > bot.log 2>&1 &
 
-# systemdサービスとして起動（最も推奨）
+# スクリプトを使った起動（最も推奨）
+./scripts/start_bot.sh
+
+# systemdサービスとして起動
 # 後述のsystemd設定を参照
+```
+
+## 自動再起動の設定（nohup + watchdog）
+
+### スクリプト一覧
+
+| スクリプト | 説明 |
+|-----------|------|
+| `scripts/start_bot.sh` | Botをnohupで起動し、PIDとログを記録 |
+| `scripts/stop_bot.sh` | Botを安全に停止 |
+| `scripts/check_bot.sh` | Botの状態を確認 |
+| `scripts/watchdog.sh` | Botを監視し、停止時に自動再起動 |
+| `scripts/setup_cron.sh` | cronジョブを設定 |
+| `scripts/view_logs.sh` | ログを閲覧 |
+
+### 初回セットアップ
+
+```bash
+# スクリプトに実行権限を付与
+chmod +x scripts/*.sh
+
+# Botを起動
+./scripts/start_bot.sh
+
+# ステータス確認
+./scripts/check_bot.sh
+```
+
+### 自動再起動の設定（2つの方法）
+
+#### 方法1: Watchdogをバックグラウンドで常駐（推奨）
+
+```bash
+# Watchdogをバックグラウンドで起動
+nohup ./scripts/watchdog.sh > logs/watchdog_daemon.log 2>&1 &
+
+# 30秒ごとにBotの状態を監視し、停止していれば自動で再起動
+```
+
+#### 方法2: Cronで定期チェック
+
+```bash
+# セットアップスクリプトを実行
+./scripts/setup_cron.sh
+
+# または手動でcronを設定
+crontab -e
+# 以下を追加（5分ごとにチェック）:
+# */5 * * * * /home/ubuntu/zircon-fun-tools/scripts/watchdog.sh --cron
+```
+
+### ログの確認
+
+```bash
+# 最新のBotログを表示
+./scripts/view_logs.sh
+
+# リアルタイムでログを追跡
+./scripts/view_logs.sh -f
+
+# クラッシュログを確認
+./scripts/view_logs.sh crash
+
+# 監視ログを確認
+./scripts/view_logs.sh watchdog
+
+# 全ログファイル一覧
+./scripts/view_logs.sh all
+
+# 古いログを削除（7日以上前）
+./scripts/view_logs.sh clean
+```
+
+### ログファイルの種類
+
+| ファイル | 場所 | 内容 |
+|---------|------|------|
+| `bot_YYYYMMDD_HHMMSS.log` | `logs/` | Bot本体のログ（起動ごとに新規作成） |
+| `crash.log` | `logs/` | クラッシュ時の詳細（最後の50行を記録） |
+| `watchdog.log` | `logs/` | 監視スクリプトのログ |
+| `shutdown.log` | `logs/` | 停止履歴 |
+
+### 運用コマンド
+
+```bash
+# Botの状態確認
+./scripts/check_bot.sh
+
+# Botを再起動
+./scripts/stop_bot.sh && ./scripts/start_bot.sh
+
+# Botを停止（自動再起動を止める場合はwatchdogも停止）
+./scripts/stop_bot.sh
+pkill -f "watchdog.sh"
 ```
 
 ## systemdサービス設定（推奨）
