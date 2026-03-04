@@ -146,10 +146,6 @@ def get_token():
 
 TOKEN = get_token()
 
-ADMIN_CHANNEL_ID = int(os.getenv('ADMIN_CHANNEL_ID_DEV' if ENV == 'development' else 'ADMIN_CHANNEL_ID_PROD', 0))
-if not ADMIN_CHANNEL_ID:
-    logger.warning("管理者チャンネルIDが設定されていません。管理者コマンドは使用できません。")
-
 # 即時ギルド同期用のGuild ID（開発/本番で切替可能）
 # 設定すると、そのギルドに対してスラッシュコマンドを即時同期します（数秒で反映）。
 # 未設定(0)の場合はグローバル同期のみとなり、反映まで最大1時間かかることがあります。
