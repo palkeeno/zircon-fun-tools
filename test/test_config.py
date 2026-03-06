@@ -19,7 +19,7 @@ class TestConfig(unittest.TestCase):
 
     def test_token_validation(self):
         # 開発環境のトークンが設定されていない場合
-        os.environ['ENV'] = 'development'
+        os.environ['ZFT_ENV'] = 'development'
         if 'DISCORD_TOKEN_DEV' in os.environ:
             del os.environ['DISCORD_TOKEN_DEV']
         import config
@@ -31,7 +31,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(config.get_token(), 'valid_token')
 
         # 本番環境のトークンが設定されていない場合
-        os.environ['ENV'] = 'production'
+        os.environ['_ENV'] = 'production'
         if 'DISCORD_TOKEN_PROD' in os.environ:
             del os.environ['DISCORD_TOKEN_PROD']
         with self.assertRaises(ValueError):
