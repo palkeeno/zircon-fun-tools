@@ -16,6 +16,8 @@ import traceback
 import config
 import platform
 import math
+import asyncio
+import functools
 
 import os
 import io
@@ -564,6 +566,100 @@ class Poster(commands.Cog):
         
         return canvas
 
+    def _scrape_character_info(self, character_id: str) -> dict:
+        """Seleniumでキャラクター情報をスクレイピングする（同期メソッド、別スレッドで呼び出す）
+
+        Args:
+            character_id: キャラクターID
+
+        Returns:
+            キャラクター情報の辞書
+
+        Raises:
+            Exception: スクレイピングに失敗した場合
+        """
+        driver = None
+        try:
+            # ChromeDriverのオプションを設定（ログ抑制）
+            chrome_options = Options()
+            chrome_options.add_argument('--disable-logging')  # ロギング無効化
+            chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])  # DevToolsログ抑制
+
+            # ヘッドレスモード（ブラウザウィンドウを開かない）
+            chrome_options.add_argument('--headless=new')
+            chrome_options.add_argument('--disable-gpu')  # GPU無効化（ヘッドレス環境で不要）
+
+            # サンドボックス・共有メモリ設定（全環境で有効化 — EC2等で必須）
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+
+            # メモリ管理オプション（EC2等の小規模インスタンス向け）
+            chrome_options.add_argument('--disable-extensions')  # 拡張機能無効化
+            chrome_options.add_argument('--disable-plugins')  # プラグイン無効化
+            chrome_options.add_argument('--blink-settings=imagesEnabled=false')  # 画像読み込み無効化（高速化）
+            chrome_options.add_argument('--disable-software-rasterizer')  # ソフトウェアラスタライザ無効化
+
+            # 追加の安定化オプション（リソース制約環境向け）
+            chrome_options.add_argument('--disable-background-networking')
+            chrome_options.add_argument('--disable-default-apps')
+            chrome_options.add_argument('--disable-sync')
+            chrome_options.add_argument('--disable-translate')
+            chrome_options.add_argument('--no-first-run')
+            chrome_options.add_argument('--window-size=1280,720')
+            chrome_options.add_argument('--disable-features=VizDisplayCompositor')
+
+            logger.info(f"Chromeドライバを起動します: character_id={character_id}")
+            driver = webdriver.Chrome(options=chrome_options)
+
+            # タイムアウト設定（リソース枯渇防止）
+            driver.set_page_load_timeout(30)  # ページ読み込みタイムアウト
+            driver.set_script_timeout(30)  # スクリプト実行タイムアウト
+            driver.implicitly_wait(5)  # 暗黙的待機
+
+            # キャラクターページURL（config.pyで一元管理）
+            character_page_url = config.get_character_page_url(character_id)
+            driver.get(character_page_url)
+
+            # WebDriverWaitで要素の読み込みを待機（time.sleepより効率的）
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "#root > main > div > section.status"))
+                )
+            except TimeoutException:
+                logger.warning(f"ページ読み込みタイムアウト: character_id={character_id}")
+                # タイムアウトでも続行を試みる
+
+            html = driver.page_source.encode("utf-8")
+            soup = BeautifulSoup(html, "html.parser")
+            selectors = {
+                'name': "#root > main > div > section.status > div > dl:nth-of-type(1) > dd > p",
+                'country': "#root > main > div > section.status > div > dl:nth-of-type(4) > dd > p",
+                'skill': "#root > main > div > section.status > div > dl:nth-of-type(5) > dd > p",
+                'sencetype': "#root > main > div > section.status > div > dl:nth-of-type(6) > dd > p",
+                'personality': "#root > main > div > section.status > div > dl:nth-of-type(7) > dd > p",
+                'goal': "#root > main > div > section.status > div > dl:nth-of-type(8) > dd > p",
+                'zirpower': "#root > main > div > section.status > div > dl:nth-of-type(9) > dd > p",
+                'zircongear': "#root > main > div > section.status > div > dl:nth-of-type(10) > dd > p",
+                'firstperson': "#root > main > div > section.status > div > dl:nth-of-type(11) > dd > p",
+                'nickname': "#root > main > div > section.status > div > dl:nth-of-type(12) > dd > p",
+                'lines': "#root > main > div > section.status > div > dl:nth-of-type(13) > dd > p",
+                'weakness': "#root > main > div > section.status > div > dl:nth-of-type(14) > dd > p"
+            }
+            info = {}
+            for key, selector in selectors.items():
+                el = soup.select_one(selector)
+                info[key] = el.text if el else ''
+
+            logger.info(f"キャラクター情報のスクレイピングが完了しました: character_id={character_id}")
+            return info
+        finally:
+            if driver:
+                try:
+                    driver.quit()
+                    logger.info("Chromeドライバを正常に終了しました")
+                except Exception as e:
+                    logger.error(f"Seleniumドライバの終了に失敗: {e}")
+
     @app_commands.command(
         name="poster", 
         description="キャラクターポスターを作成します"
@@ -591,7 +687,6 @@ class Poster(commands.Cog):
         await interaction.response.send_message(
             "キャラクターカード作成中です\nカードが完成するまでコマンドを入力しないようお願いします"
         )
-        driver = None
         try:
             # キャラ画像URL取得（config.pyで一元管理）
             url = config.get_character_image_url(character_id)
@@ -620,73 +715,13 @@ class Poster(commands.Cog):
                 logger.error(f"画像ファイルの読み込みに失敗: {e}")
                 await interaction.followup.send("画像ファイルの読み込みに失敗しました。管理者に連絡してください。", ephemeral=True)
                 return
-            # Seleniumでキャラ情報取得
+            # Seleniumでキャラ情報取得（ブロッキング処理をスレッドプールで実行）
             try:
-                # ChromeDriverのオプションを設定（ログ抑制）
-                chrome_options = Options()
-                chrome_options.add_argument('--disable-logging')  # ロギング無効化
-                chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])  # DevToolsログ抑制
-                
-                # ヘッドレスモード（ブラウザウィンドウを開かない）
-                # WindowsとLinuxの両方で同じ動作にするため
-                chrome_options.add_argument('--headless')
-                chrome_options.add_argument('--disable-gpu')  # GPU無効化（ヘッドレス環境で不要）
-                
-                # メモリ管理オプション（EC2等の小規模インスタンス向け）
-                chrome_options.add_argument('--disable-extensions')  # 拡張機能無効化
-                chrome_options.add_argument('--disable-plugins')  # プラグイン無効化
-                chrome_options.add_argument('--disable-images')  # 画像読み込み無効化（高速化）
-                chrome_options.add_argument('--single-process')  # シングルプロセスモード（メモリ節約）
-                chrome_options.add_argument('--disable-software-rasterizer')  # ソフトウェアラスタライザ無効化
-                
-                # Linux環境で必要なオプション（Windowsでも動作するが、環境判定で追加）
-                is_linux = platform.system() == "Linux"
-                if is_linux:
-                    chrome_options.add_argument('--no-sandbox')  # Linux環境で必要
-                    chrome_options.add_argument('--disable-dev-shm-usage')  # 共有メモリの問題を回避
-                
-                driver = webdriver.Chrome(options=chrome_options)
-                
-                # タイムアウト設定（リソース枯渇防止）
-                driver.set_page_load_timeout(30)  # ページ読み込みタイムアウト
-                driver.set_script_timeout(30)  # スクリプト実行タイムアウト
-                driver.implicitly_wait(5)  # 暗黙的待機
-                
-                # キャラクターページURL（config.pyで一元管理）
-                character_page_url = config.get_character_page_url(character_id)
-                driver.get(character_page_url)
-                
-                # WebDriverWaitで要素の読み込みを待機（time.sleepより効率的）
-                try:
-                    WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "#root > main > div > section.status"))
-                    )
-                except TimeoutException:
-                    logger.warning(f"ページ読み込みタイムアウト: character_id={character_id}")
-                    # タイムアウトでも続行を試みる
-                
-                html = driver.page_source.encode("utf-8")
-                soup = BeautifulSoup(html, "html.parser")
-                selectors = {
-                    'name': "#root > main > div > section.status > div > dl:nth-of-type(1) > dd > p",
-                    'country': "#root > main > div > section.status > div > dl:nth-of-type(4) > dd > p",
-                    'skill': "#root > main > div > section.status > div > dl:nth-of-type(5) > dd > p",
-                    'sencetype': "#root > main > div > section.status > div > dl:nth-of-type(6) > dd > p",
-                    'personality': "#root > main > div > section.status > div > dl:nth-of-type(7) > dd > p",
-                    'goal': "#root > main > div > section.status > div > dl:nth-of-type(8) > dd > p",
-                    'zirpower': "#root > main > div > section.status > div > dl:nth-of-type(9) > dd > p",
-                    'zircongear': "#root > main > div > section.status > div > dl:nth-of-type(10) > dd > p",
-                    'firstperson': "#root > main > div > section.status > div > dl:nth-of-type(11) > dd > p",
-                    'nickname': "#root > main > div > section.status > div > dl:nth-of-type(12) > dd > p",
-                    'lines': "#root > main > div > section.status > div > dl:nth-of-type(13) > dd > p",
-                    'weakness': "#root > main > div > section.status > div > dl:nth-of-type(14) > dd > p"
-                }
-                info = {}
-                for key, selector in selectors.items():
-                    el = soup.select_one(selector)
-                    info[key] = el.text if el else ''
+                info = await asyncio.to_thread(
+                    self._scrape_character_info, character_id
+                )
             except Exception as e:
-                logger.error(f"Selenium/スクレイピングに失敗: {e}")
+                logger.error(f"Selenium/スクレイピングに失敗: {e}", exc_info=True)
                 await interaction.followup.send("キャラクター情報の取得に失敗しました。番号が正しいか、または公式サイトの仕様変更がないかご確認ください。", ephemeral=True)
                 return
             try:
@@ -713,12 +748,6 @@ class Poster(commands.Cog):
             logger.error(f"予期せぬエラー: {e}")
             logger.error(traceback.format_exc())
             await interaction.followup.send("エラーが発生しました。管理者に連絡してください。", ephemeral=True)
-        finally:
-            if driver:
-                try:
-                    driver.quit()
-                except Exception as e:
-                    logger.error(f"Seleniumドライバの終了に失敗: {e}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Poster(bot))
