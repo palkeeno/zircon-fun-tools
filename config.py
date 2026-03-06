@@ -18,7 +18,7 @@ except Exception as e:
     logger.error(f".envファイルの読み込みに失敗しました: {e}")
     raise
 
-ENV = os.getenv('ENV', 'development')  # デフォルトは開発環境
+ENV = os.getenv('ZFT_ENV', 'development')  # デフォルトは開発環境
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 _RUNTIME_CONFIG_PATH = os.path.join(_DATA_DIR, 'config.json')
@@ -136,7 +136,7 @@ def get_token():
     現在の環境変数に基づいてトークンを取得します。
     テスト用に関数化。
     """
-    ENV = os.getenv('ENV', 'development')
+    ENV = os.getenv('ZFT_ENV', 'development')
     token = os.getenv('DISCORD_TOKEN_DEV' if ENV == 'development' else 'DISCORD_TOKEN_PROD')
     if not token:
         error_msg = "トークンが設定されていません。環境変数を設定してください。"
