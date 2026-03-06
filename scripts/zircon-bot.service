@@ -6,16 +6,16 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
-WorkingDirectory=/home/ubuntu/zircon-fun-tools
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/zircon-fun-tools
 
 # 環境設定
-Environment="ENV=production"
+Environment="ZFT_ENV=production"
 Environment="PYTHONUNBUFFERED=1"
 
 # 起動コマンド
-ExecStart=/usr/bin/python3 /home/ubuntu/zircon-fun-tools/main.py
+ExecStart=/usr/bin/python3 /home/zircon-fun-tools/main.py
 
 # 自動再起動設定
 Restart=always
