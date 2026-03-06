@@ -22,6 +22,39 @@ chmod +x setup_ec2.sh
 
 自動スクリプトが使えない場合は、以下を順番に実行：
 
+#### Amazon Linux 2023 / Amazon Linux 2 の場合（推奨）
+
+```bash
+# システム更新
+sudo yum update -y
+
+# Python環境
+sudo yum install -y python3 python3-pip
+
+# 日本語フォント（fontconfigも必要）
+sudo yum install -y fontconfig google-noto-sans-cjk-jp-fonts
+
+# フォントキャッシュ更新
+sudo fc-cache -fv
+
+# フォント確認
+fc-list :lang=ja | head -5
+
+# Google Chrome（Amazon Linuxではchromiumパッケージがないため）
+sudo tee /etc/yum.repos.d/google-chrome.repo <<EOF
+[google-chrome]
+name=google-chrome
+baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
+enabled=1
+gpgcheck=1
+gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+EOF
+
+sudo yum install -y google-chrome-stable
+```
+
+#### Ubuntu / Debian の場合
+
 ```bash
 # システム更新
 sudo apt update
@@ -40,17 +73,35 @@ fc-list :lang=ja | head -5
 
 # Chrome/ChromiumとChromeDriver（Selenium用）
 sudo apt install -y chromium-browser chromium-chromedriver
-
-# または、Google Chromeを使用する場合
-# wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-# echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-# sudo apt update
-# sudo apt install -y google-chrome-stable
 ```
 
 ### 3. Chrome/ChromiumとChromeDriverのインストール（Selenium用）
 
 `poster`コマンドでWebスクレイピングを行うため、Chrome/ChromiumとChromeDriverが必要です。
+
+#### Amazon Linux の場合
+
+Amazon Linuxでは`chromium`パッケージが提供されていないため、Google Chromeを使用します：
+
+```bash
+# Google Chromeリポジトリを追加
+sudo tee /etc/yum.repos.d/google-chrome.repo <<EOF
+[google-chrome]
+name=google-chrome
+baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
+enabled=1
+gpgcheck=1
+gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+EOF
+
+# Google Chromeをインストール
+sudo yum install -y google-chrome-stable
+
+# パス確認
+which google-chrome-stable
+```
+
+#### Ubuntu / Debian の場合
 
 ```bash
 # Chromium（推奨、軽量）
@@ -61,14 +112,9 @@ wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key ad
 echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 sudo apt update
 sudo apt install -y google-chrome-stable
-
-# ChromeDriverのパス確認（必要に応じて）
-which chromedriver
-# または
-which google-chrome-stable
 ```
 
-**注意**: Selenium 4.6以降では、ChromeDriverを自動的にダウンロード・管理する機能がありますが、システムにインストールされたChromeDriverを使用することもできます。
+**注意**: ChromeDriverは `requirements.txt` の `webdriver-manager` が自動的にダウンロード・管理するため、別途インストールは不要です。
 
 ### 4. Pythonパッケージのインストール
 
@@ -151,7 +197,7 @@ nohup ./scripts/watchdog.sh > logs/watchdog_daemon.log 2>&1 &
 # または手動でcronを設定
 crontab -e
 # 以下を追加（5分ごとにチェック）:
-# */5 * * * * /home/ubuntu/zircon-fun-tools/scripts/watchdog.sh --cron
+# */5 * * * * /home/zircon-fun-tools/scripts/watchdog.sh --cron
 ```
 
 ### ログの確認
@@ -283,7 +329,10 @@ sudo journalctl -u zircon-bot.service -p err
 # インストール済みフォント一覧
 fc-list :lang=ja
 
-# 日本語フォントを再インストール
+# 日本語フォントを再インストール（Amazon Linux）
+sudo yum reinstall -y google-noto-sans-cjk-jp-fonts
+
+# 日本語フォントを再インストール（Ubuntu/Debian）
 sudo apt install --reinstall fonts-noto-cjk fonts-noto-cjk-extra
 
 # キャッシュを強制更新
@@ -355,13 +404,13 @@ pip3 install --upgrade -r requirements.txt
 `/etc/logrotate.d/zircon-bot` を作成：
 
 ```
-/home/ubuntu/zircon-fun-tools/logs/*.log {
+/home/zircon-fun-tools/logs/*.log {
     daily
     rotate 7
     compress
     missingok
     notifempty
-    create 644 ubuntu ubuntu
+    create 644 ec2-user ec2-user
 }
 ```
 
