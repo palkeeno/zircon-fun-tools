@@ -197,11 +197,11 @@ class Lottery(commands.Cog):
             # 当選発表（Embed）
             embed = discord.Embed(
                 title=f"🎊 当選者発表 — {i}人目 🎊",
-                description=f"✨ **{winner.display_name}** さん、当選です！\n{winner.mention}",
+                description=f"✨ **{winner.display_name}** さん、当選です！",
                 color=discord.Color.gold(),
             )
             embed.set_thumbnail(url=winner.display_avatar.url if hasattr(winner, 'display_avatar') else discord.Embed.Empty)
-            await send_target(embed=embed)
+            await send_target(content=winner.mention, embed=embed)
 
             # 次の抽選に進むためのボタンを表示（最後の当選者以外）
             if i < count:
