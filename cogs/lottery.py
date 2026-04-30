@@ -142,7 +142,7 @@ class Lottery(commands.Cog):
             )
             return
   
-        # 集合作成（ボット・コマンド起動者除外）。指定ロールを持つ全員が対象。
+        # 集合作成。指定ロールを持つメンバーのうち、ボットとコマンド起動者を除外した人が対象。
         members = [m for m in role.members if not m.bot and m.id != interaction.user.id]
         if len(members) < count:
             await interaction.response.send_message(f"ロール「{role.name}」の対象人数が不足しています（{len(members)}人）。※コマンド起動者は抽選対象外です。", ephemeral=True)
