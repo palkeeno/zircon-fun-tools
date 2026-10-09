@@ -55,11 +55,41 @@ class BirthdayFixTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_save_failure_rolls_back_memory(self):
         file = MagicMock(filename='birthdays.json')
-        file.read = AsyncMock(return_value=b'[{"character_id":"2","month":2,"day":29}]')
+        file.read = AsyncMock(return_value=b'[{"character_id":"2","month":2,"day":28}]')
         original = self.cog.birthdays
         self.cog.save_birthdays = MagicMock(side_effect=OSError('disk failure'))
         await Birthday.birthday_update.callback(self.cog, self.interaction, file)
         self.assertIs(self.cog.birthdays, original)
+
+        self.cog.save_birthdays.assert_called_once()
+
+    async def test_month_day_boundaries_without_birth_year(self):
+        for extension in ["json", "csv", "legacy.csv"]:
+            for month, day, valid in [(2, 28, True), (2, 29, False), (2, 30, False),
+                                      (4, 30, True), (4, 31, False), (12, 31, True),
+                                      (0, 1, False), (13, 1, False), (1, 0, False), (1, 32, False)]:
+                with self.subTest(extension=extension, month=month, day=day):
+                    original = [{"character_id": "old", "month": 10, "day": 9}]
+                    self.cog.birthdays = original
+                    self.cog.save_birthdays = MagicMock()
+                    record = {"character_id": "2", "name": "A", "month": month, "day": day}
+                    if extension == "json":
+                        content = json.dumps([record])
+                    elif extension == "csv":
+                        content = f"character_id,name,month,day\n2,A,{month},{day}\n"
+                    else:
+                        content = f"2,{month},{day}\n"
+                    file = MagicMock(filename=f"birthdays.{extension}")
+                    file.read = AsyncMock(return_value=content.encode())
+                    await Birthday.birthday_update.callback(self.cog, self.interaction, file)
+                    if valid:
+                        self.cog.save_birthdays.assert_called_once()
+                        self.assertEqual(self.cog.birthdays[0]["month"], month)
+                        self.assertEqual(self.cog.birthdays[0]["day"], day)
+                        self.assertNotIn("year", self.cog.birthdays[0])
+                    else:
+                        self.assertIs(self.cog.birthdays, original)
+                        self.cog.save_birthdays.assert_not_called()
 
     def test_catch_up_after_scheduled_minute(self):
         self.assertTrue(self.cog._is_scheduled_time(datetime.datetime(2026, 10, 9, 9, 5)))
@@ -133,7 +163,7 @@ class CsvImportTests(unittest.IsolatedAsyncioTestCase):
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
         file = MagicMock(filename="birthdays.csv")
-        file.read = AsyncMock(return_value=b'character_id,name,month,day\n1,"A,B",2,29\n')
+        file.read = AsyncMock(return_value=b'character_id,name,month,day\n1,"A,B",2,28\n')
         await Birthday.birthday_update.callback(cog, interaction, file)
         self.assertEqual(cog.birthdays[0]["name"], "A,B")
         cog.save_birthdays.assert_called_once()
@@ -148,7 +178,7 @@ class CsvImportTests(unittest.IsolatedAsyncioTestCase):
         interaction.response = AsyncMock()
         interaction.followup = AsyncMock()
         file = MagicMock(filename="birthdays.csv")
-        file.read = AsyncMock(return_value=b'character_id,name,month,day\n1,A,2,29\n2,B,2,31\n')
+        file.read = AsyncMock(return_value=b'character_id,name,month,day\n1,A,2,28\n2,B,2,31\n')
         await Birthday.birthday_update.callback(cog, interaction, file)
         self.assertIs(cog.birthdays, original)
         cog.save_birthdays.assert_not_called()

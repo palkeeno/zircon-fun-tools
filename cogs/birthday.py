@@ -448,7 +448,7 @@ class Birthday(commands.Cog):
                 try:
                     m = int(b.get("month", 0))
                     d = int(b.get("day", 0))
-                    datetime.date(2000, m, d)  # 閏日を含む実在日を検証
+                    datetime.date(2001, m, d)  # 年は保存せず、平年で月日を検証（2月は28日まで）
                     if b.get("character_id") is not None and str(b.get("character_id", "")).strip():
                          validated.append({
                              "character_id": str(b.get("character_id", "")).strip(),
@@ -530,4 +530,4 @@ class Birthday(commands.Cog):
         )
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Birthday(bot)) 
+    await bot.add_cog(Birthday(bot))
