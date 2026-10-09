@@ -16,6 +16,11 @@ import config
 import platform
 import math
 import asyncio
+import hashlib
+from pathlib import Path
+from functools import lru_cache
+from poster_cache import PosterCache
+import setup_fonts
 
 import os
 import io
@@ -38,7 +43,12 @@ class Poster(commands.Cog):
         self.brave_path = config.POSTER_BRAVE_PATH
         self.glory_path = config.POSTER_GLORY_PATH
         self.freedom_path = config.POSTER_FREEDOM_PATH
-        self._generation_lock = asyncio.Lock()
+        self._queue = asyncio.Queue(maxsize=config.POSTER_QUEUE_LIMIT)
+        self._workers = []
+        self._inflight = {}
+        self._cache = PosterCache(Path(config._DATA_DIR) / "cache" / "posters", config.POSTER_CACHE_TTL)
+        import threading
+        self._render_locks = [threading.Lock() for _ in range(32)]
         
         # 画像アセットの存在確認
         self._check_assets()
@@ -64,101 +74,12 @@ class Poster(commands.Cog):
             for item in missing:
                 logger.info(f"  - {item}")
             logger.info("必要に応じて data/assets/ ディレクトリに画像ファイルを配置してください。")
-    def _try_load_font(self, prefer_path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-        """フォントを安全に読み込む。存在しない場合は自動ダウンロードまたはシステムフォントにフォールバック。
-
-        優先順:
-        1) config で指定されたパス（相対の場合はリポジトリルートや data/fonts も探索）
-        2) システムの既存日本語フォント（Windows/Linux 共通）
-        3) Noto Sans JP を Google Fonts からダウンロード（data/fonts/ にキャッシュ）
-        4) PIL のデフォルトフォント
-        """
-        candidates = []
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        
-        # まず指定パス
-        if prefer_path:
-            candidates.append(prefer_path)
-            if not os.path.isabs(prefer_path):
-                candidates.append(os.path.join(repo_root, prefer_path))
-                candidates.append(os.path.join(repo_root, 'data', 'fonts', prefer_path))
-
-        # システムフォント候補（環境に応じて最適化）
-        is_linux = platform.system() == "Linux"
-        if is_linux:
-            # Linux環境のフォントパス
-            system_fonts = [
-                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            ]
-        else:
-            # Windows環境のフォントパス
-            system_fonts = [
-                r"C:\Windows\Fonts\meiryo.ttc",
-                r"C:\Windows\Fonts\msgothic.ttc",
-                r"C:\Windows\Fonts\YuGothM.ttc",
-            ]
-        candidates.extend(system_fonts)
-
-        # 既存候補を試す
-        for path in candidates:
-            try:
-                if os.path.exists(path):
-                    return ImageFont.truetype(path, size)
-            except Exception:
-                continue
-
-        # ここまで見つからなければ Noto Sans JP を自動ダウンロード
-        downloaded_font = self._download_fallback_font()
-        if downloaded_font and os.path.exists(downloaded_font):
-            try:
-                return ImageFont.truetype(downloaded_font, size)
-            except Exception:
-                pass
-
-        # 最終手段: PIL デフォルト
-        logger.warning("フォントを読み込めませんでした。PILのデフォルトフォントを使用します。")
-        return ImageFont.load_default()
-
-    def _download_fallback_font(self) -> str:
-        """Google Fonts から Noto Sans JP をダウンロードし、data/fonts/ にキャッシュする。
-
-        Returns:
-            str: ダウンロードしたフォントファイルのパス。失敗時は空文字列。
-        """
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        fonts_dir = os.path.join(repo_root, 'data', 'fonts')
-        os.makedirs(fonts_dir, exist_ok=True)
-        
-        font_path = os.path.join(fonts_dir, 'NotoSansJP-Regular.ttf')
-        
-        # すでにダウンロード済みならそれを返す
-        if os.path.exists(font_path):
-            return font_path
-        
-        # Google Fonts の直リンク（Noto Sans JP Regular）
-        # 注：このURLは変わる可能性があるため、本番では fonts.google.com API や CDN を利用推奨
-        font_url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf"
-        
-        try:
-            logger.info("フォントが見つからないため、Noto Sans JP をダウンロードします: %s", font_url)
-            content = download_bytes(font_url, timeout=20, max_bytes=30 * 1024 * 1024)
-            fd, temporary = tempfile.mkstemp(prefix=".font-", dir=fonts_dir)
-            try:
-                with os.fdopen(fd, "wb") as handle:
-                    handle.write(content)
-                ImageFont.truetype(temporary, 12)  # HTMLや破損ファイルをキャッシュしない
-                os.replace(temporary, font_path)
-            finally:
-                if os.path.exists(temporary):
-                    os.remove(temporary)
-            logger.info("フォントをダウンロードしました: %s", font_path)
-            return font_path
-        except Exception as e:
-            logger.error("フォントのダウンロードに失敗しました: %s", e)
-            return ""
+    @lru_cache(maxsize=128)
+    def _try_load_font(self, prefer_path: str, size: int):
+        path = setup_fonts.find_japanese_font(prefer_path)
+        if not path:
+            raise ValueError("日本語フォントがありません。事前にpython setup_fonts.py --prepareを実行してください")
+        return ImageFont.truetype(path, size)
 
     def _draw_text_with_glow(self, draw: ImageDraw.Draw, text: str, x: int, y: int, 
                              font: ImageFont.FreeTypeFont, glow_layers: list, 
@@ -674,18 +595,84 @@ class Poster(commands.Cog):
                 except Exception as e:
                     logger.error(f"Seleniumドライバの終了に失敗: {e}")
 
+    def _cache_key(self, character_id):
+        # Source/layout, configured fonts and asset contents invalidate completed images.
+        pieces = [character_id, config.get_character_page_url(character_id),
+                  config.get_character_image_url(character_id), Path(__file__).read_bytes().hex()]
+        for path in [self.mask_path, self.peaceful_path, self.brave_path, self.glory_path, self.freedom_path]:
+            pieces.append(Path(path).read_bytes().hex() if os.path.isfile(path) else "missing")
+        for preferred in [config.POSTER_FONT_A, config.POSTER_FONT_B, config.POSTER_FONT_C, config.POSTER_FONT_D]:
+            font = setup_fonts.find_japanese_font(preferred)
+            pieces.append(preferred)
+            if font:
+                pieces.append(f"{font}:{Path(font).stat().st_mtime_ns}:{Path(font).stat().st_size}")
+        return hashlib.sha256("|".join(pieces).encode()).hexdigest()
+
     def _render_poster(self, character_id: str) -> bytes:
-        """通信、Selenium、合成をワーカースレッド内で完結させる。"""
-        path = config.IMAGE_CACHE.get_sync(config.get_character_image_url(character_id))
-        info = self._scrape_character_info(character_id)
-        with ExitStack() as stack:
-            source = stack.enter_context(Image.open(path))
-            char = stack.enter_context(source.convert("RGB"))
-            mask = stack.enter_context(Image.open(self.mask_path)) if os.path.exists(self.mask_path) else None
-            poster = stack.enter_context(self._draw_poster(char, mask, info))
-            with io.BytesIO() as output:
-                poster.save(output, format="PNG")
-                return output.getvalue()
+        key = self._cache_key(character_id)
+        with self._render_locks[int(key[:8], 16) % len(self._render_locks)]:
+            content = self._cache.get("poster", key)
+            if content is not None:
+                return content
+            info_key = config.get_character_page_url(character_id)
+            info = self._cache.get("info", info_key)
+            if info is None:
+                info = self._scrape_character_info(character_id)
+                if not info.get("name"):
+                    raise ValueError("キャラクター名を取得できませんでした")
+                self._cache.put("info", info_key, info)
+            path = config.IMAGE_CACHE.get_sync(config.get_character_image_url(character_id))
+            with ExitStack() as stack:
+                source = stack.enter_context(Image.open(path))
+                char = stack.enter_context(source.convert("RGB"))
+                mask = stack.enter_context(Image.open(self.mask_path)) if os.path.exists(self.mask_path) else None
+                poster = stack.enter_context(self._draw_poster(char, mask, info))
+                with io.BytesIO() as output:
+                    poster.save(output, format="PNG")
+                    content = output.getvalue()
+            self._cache.put("poster", key, content)
+            return content
+
+    def _start_workers(self):
+        self._workers = [worker for worker in self._workers if not worker.done()]
+        while len(self._workers) < config.POSTER_CONCURRENCY:
+            self._workers.append(asyncio.create_task(self._work()))
+
+    async def _work(self):
+        while True:
+            character_id, future = await self._queue.get()
+            try:
+                if future.cancelled():
+                    continue
+                worker = asyncio.create_task(asyncio.to_thread(self._render_poster, character_id))
+                try:
+                    content = await asyncio.shield(worker)
+                except asyncio.CancelledError:
+                    # A thread cannot be stopped. Retain the slot until it finishes.
+                    try:
+                        await worker
+                    finally:
+                        if not future.done():
+                            future.cancel()
+                    raise
+                if not future.done():
+                    future.set_result(content)
+            except Exception as exc:
+                if not future.done():
+                    future.set_exception(exc)
+            finally:
+                self._inflight.pop(character_id, None)
+                self._queue.task_done()
+
+    async def cog_unload(self):
+        for worker in self._workers:
+            worker.cancel()
+        await asyncio.gather(*self._workers, return_exceptions=True)
+        while not self._queue.empty():
+            character_id, future = self._queue.get_nowait()
+            future.cancel()
+            self._queue.task_done()
+        self._inflight.clear()
 
     @app_commands.guild_only()
     @app_commands.command(name="poster", description="キャラクターポスターを作成します")
@@ -695,30 +682,36 @@ class Poster(commands.Cog):
         if not character_id.isascii() or not character_id.isdigit():
             await interaction.response.send_message("キャラクターIDは半角数字で入力してください。", ephemeral=True)
             return
+        if len(character_id) > 20:
+            await interaction.response.send_message("キャラクターIDは20桁以内で指定してください。", ephemeral=True)
+            return
+        future = self._inflight.get(character_id)
+        if future is None:
+            future = asyncio.get_running_loop().create_future()
+            try:
+                self._queue.put_nowait((character_id, future))
+            except asyncio.QueueFull:
+                await interaction.response.send_message("生成待ちが上限に達しました。しばらくしてから実行してください。", ephemeral=True)
+                return
+            self._inflight[character_id] = future
+            # Consume errors even if all callers disconnect or time out.
+            future.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
+        self._start_workers()
         await interaction.response.defer(thinking=True)
+        await interaction.edit_original_response(content=f"生成を受け付けました。待ち件数: {self._queue.qsize()}件")
         try:
-            async with self._generation_lock:
-                worker = asyncio.create_task(asyncio.to_thread(self._render_poster, character_id))
-                try:
-                    content = await asyncio.shield(worker)
-                except asyncio.CancelledError:
-                    # スレッドはキャンセルできないため、完了まで生成枠を保持する。
-                    try:
-                        await worker
-                    finally:
-                        raise
+            content = await asyncio.wait_for(asyncio.shield(future), timeout=600)
             with io.BytesIO(content) as output:
                 file = discord.File(output, filename=f"poster_{character_id}.png")
                 try:
-                    await interaction.followup.send(
-                        content=f"✅ キャラクター #{character_id} のポスターが完成しました！",
-                        file=file,
-                    )
+                    await interaction.followup.send(content=f"✅ キャラクター #{character_id} のポスターが完成しました！", file=file)
                 finally:
                     file.close()
-        except Exception:
-            logger.exception("ポスターの生成または送信に失敗しました: %s", character_id)
-            await interaction.followup.send("ポスターを作成できませんでした。番号・通信状態をご確認ください。", ephemeral=True)
+        except asyncio.TimeoutError:
+            await interaction.followup.send("生成待ちが10分を超えました。後ほど再実行してください。", ephemeral=True)
+        except Exception as exc:
+            from command_errors import send_error
+            await send_error(interaction, exc)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Poster(bot))

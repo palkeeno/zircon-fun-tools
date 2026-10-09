@@ -9,6 +9,66 @@ import sys
 import os
 import logging
 import platform
+from pathlib import Path
+from PIL import ImageFont
+
+
+def find_japanese_font(preferred=None):
+    """Resolve only prepared local fonts; never download during generation."""
+    root = Path(__file__).resolve().parent
+    candidates = []
+    if preferred:
+        candidates.extend([Path(preferred), root / preferred, root / "data" / "fonts" / preferred])
+    candidates.extend([
+        root / "data/fonts/NotoSansJP-Regular.ttf",
+        Path(r"C:\Windows\Fonts\meiryo.ttc"), Path(r"C:\Windows\Fonts\msgothic.ttc"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc"),
+        Path("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc"),
+    ])
+    if is_linux():
+        try:
+            result = subprocess.run(["fc-match", "-f", "%{file}", ":lang=ja"], capture_output=True, text=True, timeout=5)
+            if result.stdout.strip():
+                candidates.append(Path(result.stdout.strip()))
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    for path in candidates:
+        try:
+            if path.is_file():
+                font = ImageFont.truetype(str(path), 24)
+                if bytes(font.getmask("漢")) != bytes(font.getmask("語")):
+                    return str(path)
+        except OSError:
+            continue
+    return None
+
+
+def prepare_japanese_font():
+    """Explicit setup step, usable without Discord settings or system privileges."""
+    prepared = find_japanese_font()
+    if prepared:
+        return prepared
+    from image_cache import download_bytes
+    import tempfile
+    directory = Path(__file__).resolve().parent / "data/fonts"
+    directory.mkdir(parents=True, exist_ok=True)
+    content = download_bytes("https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf",
+                             timeout=30, max_bytes=30 * 1024 * 1024)
+    fd, temporary = tempfile.mkstemp(prefix=".font-", suffix=".ttf", dir=directory)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(content)
+        font = ImageFont.truetype(temporary, 24)
+        if bytes(font.getmask("漢")) == bytes(font.getmask("語")):
+            raise ValueError("日本語グリフを確認できませんでした")
+        destination = directory / "NotoSansJP-Regular.ttf"
+        os.replace(temporary, destination)
+        return str(destination)
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)
 
 logger = logging.getLogger(__name__)
 
@@ -148,4 +208,13 @@ if __name__ == "__main__":
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
-    setup_fonts_if_needed()
+    import argparse
+    parser = argparse.ArgumentParser(description="日本語フォントをBot起動前に準備します")
+    parser.add_argument("--prepare", action="store_true")
+    args = parser.parse_args()
+    if args.prepare:
+        print(prepare_japanese_font())
+    else:
+        prepared = find_japanese_font()
+        print(prepared or "日本語フォントがありません。--prepareを指定してください")
+        sys.exit(0 if prepared else 1)
