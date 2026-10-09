@@ -47,12 +47,17 @@ def find_japanese_font(preferred=None):
 
 def prepare_japanese_font():
     """Explicit setup step, usable without Discord settings or system privileges."""
+    directory = Path(__file__).resolve().parent / "data/fonts"
+    destination = directory / "NotoSansJP-Regular.ttf"
     prepared = find_japanese_font()
     if prepared:
+        # Repair permissions of fonts cached by older preparations, but never
+        # change the ownership or permissions of system/custom font files.
+        if not destination.is_symlink() and Path(prepared).resolve() == destination.resolve():
+            os.chmod(prepared, 0o644)
         return prepared
     from image_cache import download_bytes
     import tempfile
-    directory = Path(__file__).resolve().parent / "data/fonts"
     directory.mkdir(parents=True, exist_ok=True)
     content = download_bytes("https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf",
                              timeout=30, max_bytes=30 * 1024 * 1024)
@@ -63,7 +68,9 @@ def prepare_japanese_font():
         font = ImageFont.truetype(temporary, 24)
         if bytes(font.getmask("漢")) == bytes(font.getmask("語")):
             raise ValueError("日本語グリフを確認できませんでした")
-        destination = directory / "NotoSansJP-Regular.ttf"
+        # mkstemp defaults to 0600. The public font must be readable when the
+        # installer and SERVICE_USER are different accounts.
+        os.chmod(temporary, 0o644)
         os.replace(temporary, destination)
         return str(destination)
     finally:

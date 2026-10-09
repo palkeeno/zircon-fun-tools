@@ -26,7 +26,7 @@ Base: latest `origin/main` at `435a375` (including the target-guild synchronizat
 
 ## Verification
 
-- Windows / Python 3.11: 108 tests pass through `python test/run_tests.py`.
+- Windows / Python 3.11: 109 tests pass through `python test/run_tests.py`.
 - Direct `python -m unittest discover test`: same suite, disposable configuration and data.
 - Bash syntax checks for scripts; installer exercised with fake sudo/systemctl/crontab, including a path containing spaces and `%` and a legacy-PID refusal.
 - CI: Windows/Ubuntu and Python 3.10/3.12 (results must be checked on the PR head).
@@ -57,3 +57,5 @@ Each path has an executable regression test in test_features.py.
 
 - Derive missing legacy quote IDs from normalized content and valid duplicate-content ordinals, independent of rejected-row positions; removing rejected rows preserves displayed identities.
 - Version persistent character metadata by the source loaded for the deployment, so selector/schema changes refresh metadata before rendering under new code.
+
+- Store downloaded public fonts with mode 0644 and repair old private-mode cached downloads on preparation, without changing system/custom font permissions. POSIX CI verifies the final mode.

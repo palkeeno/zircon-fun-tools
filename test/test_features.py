@@ -4,6 +4,7 @@ import datetime
 import io
 import json
 import os
+import stat
 from pathlib import Path
 import tempfile
 import threading
@@ -677,6 +678,30 @@ class CacheFeatureTests(unittest.TestCase):
 
 
 class HelpAndErrorTests(unittest.IsolatedAsyncioTestCase):
+    def test_downloaded_font_permissions_allow_service_user_and_repair_existing_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            font = MagicMock()
+            font.getmask.side_effect = [b'kanji-A', b'kanji-B']
+            real_chmod = os.chmod
+            with patch.object(setup_fonts, '__file__', str(root / 'setup_fonts.py')), \
+                 patch('setup_fonts.find_japanese_font', return_value=None), \
+                 patch('image_cache.download_bytes', return_value=b'validated-font') as download, \
+                 patch('setup_fonts.ImageFont.truetype', return_value=font), \
+                 patch('setup_fonts.os.chmod', wraps=real_chmod) as chmod:
+                prepared = Path(setup_fonts.prepare_japanese_font())
+                self.assertEqual(prepared.read_bytes(), b'validated-font')
+                self.assertEqual(chmod.call_args.args[1], 0o644)
+                if os.name == 'posix':
+                    self.assertEqual(stat.S_IMODE(prepared.stat().st_mode), 0o644)
+                real_chmod(prepared, 0o600)
+                with patch('setup_fonts.find_japanese_font', return_value=str(prepared)):
+                    self.assertEqual(setup_fonts.prepare_japanese_font(), str(prepared))
+                self.assertEqual(chmod.call_args.args, (str(prepared), 0o644))
+                download.assert_called_once()
+                if os.name == 'posix':
+                    self.assertEqual(stat.S_IMODE(prepared.stat().st_mode), 0o644)
+
     def test_test_bootstrap_isolates_all_default_image_assets(self):
         directory = Path(config._DATA_DIR).resolve()
         self.assertNotEqual(directory, Path(config.__file__).resolve().parent / 'data')
