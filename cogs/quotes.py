@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import csv
 import datetime
 import io
 import json
@@ -19,13 +18,14 @@ from discord.ext import commands, tasks
 
 import config
 import utils
+from quote_records import normalize, merge_records, parse_upload
+from cogs.pagination import Pagination
 
 logger = logging.getLogger(__name__)
 # 環境に依存しないパス構築
 _DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
 _DATA_DIR = os.path.abspath(_DATA_DIR)
-_DEFAULT_DATA_PATH = os.path.join(_DATA_DIR, "quotes.json")
-_ITEMS_PER_PAGE = 10
+_DEFAULT_DATA_PATH = os.path.join(config._DATA_DIR, "quotes.json")
 
 
 def _now(tz: datetime.tzinfo) -> datetime.datetime:
@@ -44,6 +44,7 @@ class Quotes(commands.Cog):
         self.quotes: List[Dict] = []
         self.settings: Dict[str, Any] = {}
         self._task_started = False
+        self._has_rejected_rows = False
         self._load_data()
         self.settings = self._load_settings()
         logger.info("Quotes が初期化されました")
@@ -104,43 +105,46 @@ class Quotes(commands.Cog):
         self._ensure_data_dir()
 
         if not os.path.exists(self.data_path):
+            self._has_rejected_rows = False
             self.quotes = []
             self._save_data()
             return
 
-        try:
-            with open(self.data_path, "r", encoding="utf-8") as handle:
-                payload = json.load(handle)
-        except json.JSONDecodeError as exc:
-            logger.error("quotes.json の読み込みに失敗しました: %s", exc)
-            payload = {}
-        except FileNotFoundError:
-            payload = {}
-
-        if isinstance(payload, list):
-            # 旧形式との互換性維持
-            self.quotes = payload
+        with open(self.data_path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        rows = payload if isinstance(payload, list) else payload.get("quotes") if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            raise ValueError("quotes.json must contain a quote list")
+        valid, rejected, seen, ordinals = [], [], set(), {}
+        for number, row in enumerate(rows, 1):
+            try:
+                quote = normalize(row)
+                identity = {key: quote[key] for key in ('speaker', 'text', 'character_id')}
+                content_key = json.dumps(identity, ensure_ascii=False, sort_keys=True)
+                ordinal = ordinals.get(content_key, 0) + 1
+                # Rejected rows must not affect legacy IDs. Count only valid
+                # records with identical normalized content, never absolute rows.
+                quote["id"] = quote["id"] or str(uuid.uuid5(uuid.NAMESPACE_URL,
+                    f"zft-quote:{ordinal}:" + content_key))
+                if quote["id"] in seen:
+                    raise ValueError("duplicate ID")
+                seen.add(quote["id"])
+                ordinals[content_key] = ordinal
+                valid.append(quote)
+            except ValueError as exc:
+                rejected.append({"row": number, "error": str(exc), "record": row})
+        self.quotes = valid
+        self._has_rejected_rows = bool(rejected)
+        if rejected:
+            utils.atomic_write_json(self.data_path + ".rejected.json", rejected)
+            logger.warning("Rejected %s invalid quotes; original file preserved", len(rejected))
+        elif rows != valid or isinstance(payload, list):
             self._save_data()
-            return
-
-        if isinstance(payload, dict):
-            self.quotes = payload.get("quotes", [])
-        else:
-            self.quotes = []
-
-        if not isinstance(self.quotes, list):
-            self.quotes = []
-
-        for quote in self.quotes:
-            if not isinstance(quote, dict):
-                continue
-            quote.setdefault("speaker", "")
-            quote.setdefault("text", "")
-            quote.setdefault("id", "")
-            quote.setdefault("character_id", None)
 
     def _save_data(self) -> None:
         """Persist quotes to disk."""
+        if getattr(self, "_has_rejected_rows", False):
+            raise ValueError("不正な名言を含むため個別更新できません。.rejected.jsonを確認し、修正したファイルで全置換してください")
         self._ensure_data_dir()
         payload = {
             "quotes": self.quotes,
@@ -269,6 +273,9 @@ class Quotes(commands.Cog):
             self.quote_posting_loop.start()
             self._task_started = True
 
+    def cog_unload(self):
+        self.quote_posting_loop.cancel()
+
     # ===== Utility helpers =====
 
     def _format_quote_line(self, quote: Dict) -> str:
@@ -290,57 +297,37 @@ class Quotes(commands.Cog):
         else:
             await self._handle_list(interaction)
 
-    async def _handle_list(self, interaction: discord.Interaction, page: int = 1):
-        # List logic handling
-        total = len(self.quotes)
-        if total == 0:
-            await interaction.response.send_message("名言はまだ登録されていません。", ephemeral=True)
+    async def _show_records(self, interaction, records, title):
+        if not records:
+            await interaction.response.send_message("該当する名言はありません。", ephemeral=True)
             return
+        view = Pagination(records, interaction.user.id, title,
+                          lambda q: (f"{q['speaker']} (ID: {q['id']})", self._format_quote_line(q)))
+        await interaction.response.send_message(embed=view.embed(), view=view, ephemeral=True)
+        view.message = await interaction.original_response()
 
-        embed = discord.Embed(
-            title="📝 名言一覧",
-            description=f"登録数: {total} 件",
-            color=discord.Color.blue(),
-        )
-        for quote in self.quotes[:_ITEMS_PER_PAGE]:
-            quote_id = quote.get("id", "")
-            embed.add_field(
-                name=f"{quote.get('speaker', '不明')} (ID: {quote_id})",
-                value=self._format_quote_line(quote),
-                inline=False,
-            )
-        
-        if total > _ITEMS_PER_PAGE:
-            embed.set_footer(text=f"※ 全 {total} 件中、先頭 {_ITEMS_PER_PAGE} 件を表示しています。絞り込むにはキーワードを指定してください。")
-            
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+    async def _handle_list(self, interaction, page=1):
+        await self._show_records(interaction, self.quotes, "📝 名言一覧")
 
-    async def _handle_search(self, interaction: discord.Interaction, keyword: str):
-        keyword = keyword.strip().lower()
-        matches = [
-            q for q in self.quotes
-            if keyword in q.get("speaker", "").lower() or keyword in q.get("text", "").lower()
-        ]
-        if not matches:
-            await interaction.response.send_message("該当する名言は見つかりませんでした。", ephemeral=True)
-            return
+    async def _handle_search(self, interaction, keyword):
+        keyword = keyword.strip().casefold()
+        matches = [q for q in self.quotes if any(keyword in str(q.get(key) or "").casefold()
+                   for key in ("speaker", "text", "id", "character_id"))]
+        await self._show_records(interaction, matches, "🔍 名言検索結果")
 
-        embed = discord.Embed(
-            title=f"🔍 検索結果 ({len(matches)}件)",
-            color=discord.Color.teal(),
-        )
-        for quote in matches[:_ITEMS_PER_PAGE]:
-            quote_id = quote.get("id", "")
-            embed.add_field(
-                name=f"{quote.get('speaker', '不明')} (ID: {quote_id})",
-                value=self._format_quote_line(quote),
-                inline=False,
-            )
-        if len(matches) > _ITEMS_PER_PAGE:
-             embed.set_footer(text=f"先頭 {_ITEMS_PER_PAGE} 件のみ表示。残り {len(matches) - _ITEMS_PER_PAGE} 件はキーワードをより詳細にしてください。")
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
+    async def _replace_records(self, records, *, full_replace=False):
+        rejected = getattr(self, "_has_rejected_rows", False)
+        if rejected and not full_replace:
+            raise ValueError("不正な名言を含むため個別更新できません。.rejected.jsonを確認し、修正したファイルで全置換してください")
+        previous = self.quotes
+        self.quotes = records
+        self._has_rejected_rows = False
+        try:
+            await asyncio.to_thread(self._save_data)
+        except BaseException:
+            self.quotes = previous
+            self._has_rejected_rows = rejected
+            raise
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
@@ -351,90 +338,68 @@ class Quotes(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
         try:
-            content = await file.read()
-            filename = file.filename.lower()
-            new_quotes = []
-
-            now_iso = _now(self.tz).isoformat()
-            
-            if filename.endswith(".json"):
-                 data = json.loads(content.decode("utf-8"))
-                 if isinstance(data, list):
-                     for item in data:
-                        new_quotes.append({
-                            "id": str(uuid.uuid4()),
-                            "speaker": item.get("speaker", "不明"),
-                            "text": item.get("text", ""),
-                            "character_id": item.get("character_id"),
-                            "created_by": interaction.user.id,
-                            "created_at": now_iso,
-                            "updated_at": now_iso
-                        })
-                 else:
-                     await interaction.followup.send("JSONはリスト形式である必要があります。", ephemeral=True)
-                     return
-
-            elif filename.endswith(".csv"):
-                text_data = content.decode("utf-8-sig")
-                f = io.StringIO(text_data)
-                reader = csv.DictReader(f)
-                
-                # Check headers or fallback to positional
-                fieldnames = [fn.lower() for fn in (reader.fieldnames or [])]
-                if "speaker" in fieldnames and "text" in fieldnames:
-                    # DictReader usage
-                    f.seek(0)
-                    reader = csv.DictReader(f) # reset
-                    for row in reader:
-                        # Normalize keys
-                        row_lower = {k.lower(): v for k, v in row.items()}
-                        new_quotes.append({
-                            "id": str(uuid.uuid4()),
-                            "speaker": row_lower.get("speaker", "不明"),
-                            "text": row_lower.get("text", ""),
-                            "character_id": row_lower.get("character_id"),
-                            "created_by": interaction.user.id,
-                            "created_at": now_iso,
-                            "updated_at": now_iso
-                        })
-                else:
-                    # Positional fallback
-                    f.seek(0)
-                    reader_list = list(csv.reader(f))
-                    for row in reader_list:
-                         if not row: continue
-                         if len(row) >= 2:
-                             new_quotes.append({
-                                "id": str(uuid.uuid4()),
-                                "speaker": row[0],
-                                "text": row[1],
-                                "character_id": row[2] if len(row) > 2 else None,
-                                "created_by": interaction.user.id,
-                                "created_at": now_iso,
-                                "updated_at": now_iso
-                            })
-            else:
-                 await interaction.followup.send("対応形式: .json, .csv", ephemeral=True)
-                 return
-            
-            if not new_quotes:
-                await interaction.followup.send("データが見つかりませんでした。", ephemeral=True)
-                return
-
+            if isinstance(file.size, int) and file.size > 5 * 1024 * 1024:
+                raise ValueError("ファイルは5MB以内で指定してください")
+            rows = parse_upload(await file.read(), file.filename)
             async with self._data_lock:
-                previous = self.quotes
-                self.quotes = new_quotes
-                try:
-                    await asyncio.to_thread(self._save_data)
-                except Exception:
-                    self.quotes = previous
-                    raise
+                records = merge_records(rows, self.quotes, interaction.user.id, _now(self.tz).isoformat())
+                await self._replace_records(records, full_replace=True)
+            await interaction.followup.send(f"名言データを全置換しました ({len(records)}件)。", ephemeral=True)
+        except (ValueError, UnicodeError) as exc:
+            await interaction.followup.send(f"更新しませんでした: {exc}", ephemeral=True)
 
-            await interaction.followup.send(f"名言データを全置換しました ({len(new_quotes)}件)。", ephemeral=True)
+    @app_commands.guild_only()
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.command(name="quote_add", description="名言を1件追加します")
+    async def quote_add(self, interaction: discord.Interaction, speaker: str, text: str, character_id: Optional[str] = None):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            async with self._data_lock:
+                record = merge_records([dict(speaker=speaker, text=text, character_id=character_id)], [],
+                                       interaction.user.id, _now(self.tz).isoformat())[0]
+                await self._replace_records([*self.quotes, record])
+            await interaction.followup.send(f"名言を追加しました。ID: {record['id']}", ephemeral=True)
+        except ValueError as exc:
+            await interaction.followup.send(str(exc), ephemeral=True)
 
-        except Exception as e:
-            logger.error(f"Error in quote_update: {e}", exc_info=True)
-            await interaction.followup.send("更新中にエラーが発生しました。", ephemeral=True)
+    @app_commands.guild_only()
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.command(name="quote_edit", description="IDを指定して名言を編集します")
+    @app_commands.describe(clear_character="trueでキャラクターIDを解除（character_idとの併用不可）")
+    async def quote_edit(self, interaction: discord.Interaction, quote_id: str, speaker: Optional[str] = None,
+                         text: Optional[str] = None, character_id: Optional[str] = None, clear_character: bool = False):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            if clear_character and character_id is not None:
+                raise ValueError("character_idとclear_characterは同時に指定できません")
+            async with self._data_lock:
+                existing = next((q for q in self.quotes if q['id'] == quote_id), None)
+                if existing is None:
+                    raise ValueError("指定した名言IDは見つかりません")
+                changes = {key: value for key, value in dict(speaker=speaker, text=text, character_id=character_id).items() if value is not None}
+                if clear_character:
+                    changes['character_id'] = None
+                record = merge_records([{**existing, **changes}], self.quotes, interaction.user.id, _now(self.tz).isoformat())[0]
+                await self._replace_records([record if q['id'] == quote_id else q for q in self.quotes])
+            await interaction.followup.send(f"名言 {quote_id} を編集しました。", ephemeral=True)
+        except ValueError as exc:
+            await interaction.followup.send(str(exc), ephemeral=True)
+
+    @app_commands.guild_only()
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.command(name="quote_delete", description="IDを指定して名言を削除します（confirm:trueで確定）")
+    async def quote_delete(self, interaction: discord.Interaction, quote_id: str, confirm: bool = False):
+        await interaction.response.defer(ephemeral=True)
+        async with self._data_lock:
+            existing = next((q for q in self.quotes if q['id'] == quote_id), None)
+            if existing is None:
+                await interaction.followup.send("指定した名言IDは見つかりません。", ephemeral=True)
+                return
+            if not confirm:
+                await interaction.followup.send(f"削除対象: {existing['speaker']} » {existing['text'][:200]}\n削除するには同じIDでconfirm:trueを指定してください。", ephemeral=True)
+                return
+            await self._replace_records([q for q in self.quotes if q['id'] != quote_id])
+        await interaction.followup.send(f"名言 {quote_id} を削除しました。", ephemeral=True)
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)

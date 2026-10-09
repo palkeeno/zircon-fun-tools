@@ -13,6 +13,8 @@ import datetime
 import os
 import config
 import utils
+from birthday_records import normalize, select
+from cogs.pagination import Pagination
 
 import csv
 import io
@@ -88,7 +90,7 @@ class BirthdayPaginationView(discord.ui.View):
 class Birthday(commands.Cog):
     """誕生日管理のコグ"""
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot, data_path: Optional[str] = None):
         """
         誕生日管理のコグを初期化します。
 
@@ -96,6 +98,7 @@ class Birthday(commands.Cog):
             bot (commands.Bot): ボットのインスタンス
         """
         self.bot = bot
+        self.data_path = data_path or os.path.join(config._DATA_DIR, "birthdays.json")
         self.tz = utils.get_timezone()
         self.birthdays = []
         self.defaults: Dict[str, Any] = self._feature_defaults()
@@ -186,7 +189,9 @@ class Birthday(commands.Cog):
                 return
 
             today_str = now.date().isoformat()
-            if self.settings.get("last_announced_date") == today_str:
+            pending_today = any(b["month"] == now.month and b["day"] == now.day
+                                and not b.get("reported", False) for b in self.birthdays)
+            if self.settings.get("last_announced_date") == today_str and not pending_today:
                 return
 
             announced = await self._announce_today_birthdays(now)
@@ -245,85 +250,86 @@ class Birthday(commands.Cog):
         return announced_any and all(b.get("reported", False) for b in today_birthdays)
 
     async def _announce_zircon_birthday(self, channel, birthday_data) -> bool:
-        """キャッシュ画像を添付し、Discord送信成功時だけ True を返す。"""
         character_id = str(birthday_data.get("character_id", ""))
+        embed = discord.Embed(title="🎉 誕生日おめでとう！ 🎉",
+            description=f"**{birthday_data.get('name', '不明')}** の誕生日です！", color=discord.Color.blue())
+        embed.add_field(name="誕生日", value=f"{birthday_data.get('month')}月{birthday_data.get('day')}日")
+        embed.add_field(name="キャラクター番号", value=character_id)
+        file = None
         try:
             path = await config.IMAGE_CACHE.get(config.get_character_image_url(character_id))
-            embed = discord.Embed(
-                title="🎉 誕生日おめでとう！ 🎉",
-                description=f"**{birthday_data.get('name', '不明')}** の誕生日です！",
-                color=discord.Color.blue(),
-            )
-            embed.add_field(name="誕生日", value=f"{birthday_data.get('month')}月{birthday_data.get('day')}日", inline=False)
-            embed.add_field(name="キャラクター番号", value=character_id, inline=False)
-            embed.set_footer(text="Zirconキャラクター")
-            embed.set_thumbnail(url=f"attachment://{character_id}.png")
             file = discord.File(path, filename=f"{character_id}.png")
-            try:
+            embed.set_thumbnail(url=f"attachment://{character_id}.png")
+        except Exception:
+            logger.warning("画像取得に失敗したため文字だけでお祝いします: %s", character_id, exc_info=True)
+        try:
+            if file:
                 await channel.send(embed=embed, file=file)
-            finally:
-                file.close()
+            else:
+                await channel.send(embed=embed)
             return True
         except Exception:
-            logger.exception("誕生日の画像取得または送信に失敗しました: %s", character_id)
+            logger.exception("誕生日の送信に失敗しました: %s", character_id)
             return False
+        finally:
+            if file:
+                file.close()
 
     def load_birthdays(self):
-        """誕生日データを読み込みます（リスト形式）。dataフォルダがなければ作成。"""
-        # 環境に依存しないパス構築
-        data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
-        data_dir = os.path.abspath(data_dir)
-        birthdays_path = os.path.join(data_dir, 'birthdays.json')
-
-        os.makedirs(data_dir, exist_ok=True)
-        try:
-            if not os.path.exists(birthdays_path):
-                utils.atomic_write_json(birthdays_path, [])
-            with open(birthdays_path, "r", encoding="utf-8") as f:
-                self.birthdays = json.load(f)
-                if not isinstance(self.birthdays, list):
-                    self.birthdays = []
-        except Exception as e:
-            logger.error(f"Error loading birthdays: {e}")
-            logger.error(traceback.format_exc())
+        os.makedirs(os.path.dirname(self.data_path), exist_ok=True)
+        if not os.path.isfile(self.data_path):
             self.birthdays = []
+            self.save_birthdays()
+            return
+        with open(self.data_path, encoding="utf-8") as handle:
+            rows = json.load(handle)
+        if not isinstance(rows, list):
+            raise ValueError("birthdays.json must be a list")
+        valid, rejected, dates_by_id = [], [], {}
+        for number, row in enumerate(rows, 1):
+            try:
+                record = normalize(row)
+                date = (record["month"], record["day"])
+                if record["character_id"] in dates_by_id and dates_by_id[record["character_id"]] != date:
+                    raise ValueError("同じキャラクターIDに異なる誕生日が登録されています")
+                dates_by_id[record["character_id"]] = date
+                valid.append(record)
+            except (ValueError, TypeError) as exc:
+                rejected.append({"row": number, "error": str(exc), "record": row})
+        self.birthdays = valid
+        if rejected:
+            utils.atomic_write_json(self.data_path + ".rejected.json", rejected)
+            logger.warning("Rejected %s invalid birthdays; original preserved", len(rejected))
+            raise ValueError("誕生日データに不正なレコードがあります。.rejected.jsonを確認してください")
 
     def save_birthdays(self):
-        """誕生日データを保存します（リスト形式）。dataフォルダがなければ作成。
+        utils.atomic_write_json(self.data_path, self.birthdays)
 
-        Note: 非同期コンテキストから呼び出す場合はsave_birthdays_async()を使用してください。
-        """
-        # 環境に依存しないパス構築
-        data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
-        data_dir = os.path.abspath(data_dir)
-        birthdays_path = os.path.join(data_dir, 'birthdays.json')
-
-        os.makedirs(data_dir, exist_ok=True)
-        utils.atomic_write_json(birthdays_path, self.birthdays)
+    def cog_unload(self):
+        self.birthday_task.cancel()
 
     async def save_birthdays_async(self):
         """誕生日データを非同期で保存します（ロック付き）。"""
         async with self._data_lock:
             await asyncio.to_thread(self.save_birthdays)
 
-    @app_commands.command(name="birthday", description="誕生日の確認（一覧表示または検索）")
-    @app_commands.describe(id_or_name="検索したいキャラクターIDまたは名前（指定しない場合は一覧表示）")
-    async def birthday(self, interaction: discord.Interaction, id_or_name: Optional[str] = None):
-        """
-        引数なしなら一覧表示、引数ありなら検索を行います。
-        """
-        try:
-            # 引数がある場合は検索モード
-            if id_or_name:
-                await self._handle_search(interaction, id_or_name)
-            else:
-                # 引数がない場合は一覧表示モード
-                await self._handle_list(interaction)
-        except Exception as e:
-            logger.error(f"Error in birthday command: {e}", exc_info=True)
-            await interaction.response.send_message(
-                "エラーが発生しました。", ephemeral=True
-            )
+    @app_commands.command(name="birthday", description="誕生日を一覧・検索・今日・今月・次に来る順で表示します")
+    @app_commands.choices(mode=[app_commands.Choice(name="一覧", value="all"),
+        app_commands.Choice(name="今日", value="today"), app_commands.Choice(name="今月", value="month"),
+        app_commands.Choice(name="次に来る順", value="upcoming")])
+    async def birthday(self, interaction: discord.Interaction, id_or_name: Optional[str] = None, mode: str = "all"):
+        records = select(self.birthdays, mode, datetime.datetime.now(self.tz).date())
+        if id_or_name:
+            query = id_or_name.strip().casefold()
+            records = [b for b in records if query in b['character_id'].casefold() or query in b['name'].casefold()]
+        if not records:
+            await interaction.response.send_message("該当する誕生日はありません。", ephemeral=True)
+            return
+        titles = {"all": "誕生日一覧", "today": "今日の誕生日", "month": "今月の誕生日", "upcoming": "次に来る誕生日順"}
+        view = Pagination(records, interaction.user.id, titles[mode],
+            lambda b: (f"{b['name']} (#{b['character_id']})", f"{b['month']}月{b['day']}日"))
+        await interaction.response.send_message(embed=view.embed(), view=view)
+        view.message = await interaction.original_response()
 
     async def _handle_search(self, interaction: discord.Interaction, query: str):
         candidates = [b for b in self.birthdays
@@ -442,30 +448,19 @@ class Birthday(commands.Cog):
                 await interaction.followup.send("有効な誕生日データが見つかりませんでした。", ephemeral=True)
                 return
 
-            # バリデーションと整形
             validated = []
-            for b in new_birthdays:
+            for row in new_birthdays:
                 try:
-                    m = int(b.get("month", 0))
-                    d = int(b.get("day", 0))
-                    datetime.date(2000, m, d)  # 閏日を含む実在日を検証
-                    if b.get("character_id") is not None and str(b.get("character_id", "")).strip():
-                         validated.append({
-                             "character_id": str(b.get("character_id", "")).strip(),
-                             "name": str(b.get("name", "不明")),
-                             "month": m,
-                             "day": d,
-                             "reported": False
-                         })
-                except (AttributeError, TypeError, ValueError):
+                    validated.append(normalize({**row, "reported": False}))
+                except (ValueError, TypeError):
                     continue
 
             if not validated:
                 await interaction.followup.send("検証後の有効データが0件のため更新しません。既存データは保持されます。", ephemeral=True)
                 return
-            keys = [(b["character_id"], b["month"], b["day"]) for b in validated]
+            keys = [b["character_id"] for b in validated]
             if len(keys) != len(set(keys)):
-                await interaction.followup.send("同じキャラクターID・日付の重複があるため更新しません。", ephemeral=True)
+                await interaction.followup.send("キャラクターIDの重複があるため更新しません。", ephemeral=True)
                 return
             invalid_count = len(new_birthdays) - len(validated)
             if invalid_count:
@@ -473,6 +468,12 @@ class Birthday(commands.Cog):
                 return
             async with self._data_lock:
                 previous = self.birthdays
+                reported = {}
+                for b in previous:
+                    key = (b["character_id"], b["month"], b["day"])
+                    reported[key] = reported.get(key, False) or b.get("reported", False)
+                for record in validated:
+                    record["reported"] = reported.get((record["character_id"], record["month"], record["day"]), False)
                 self.birthdays = validated
                 try:
                     await asyncio.to_thread(self.save_birthdays)
@@ -529,5 +530,80 @@ class Birthday(commands.Cog):
             ephemeral=True,
         )
 
+    async def _replace_birthdays(self, records):
+        validated = [normalize(record) for record in records]
+        # A mutation must not introduce duplicates, but preserved legacy groups
+        # elsewhere in the list must not prevent management of another character.
+        prior_counts, prior_dates = {}, {}
+        for record in self.birthdays:
+            cid = record['character_id']
+            prior_counts[cid] = prior_counts.get(cid, 0) + 1
+            prior_dates.setdefault(cid, set()).add((record['month'], record['day']))
+        grouped = {}
+        for record in validated:
+            grouped.setdefault(record['character_id'], []).append(record)
+        canonical = []
+        for cid, group in grouped.items():
+            dates = {(b['month'], b['day']) for b in group}
+            if len(group) > 1 and (len(dates) != 1 or dates != prior_dates.get(cid)
+                                  or len(group) > prior_counts.get(cid, 0)):
+                raise ValueError("同じキャラクターIDが既に登録されています")
+            canonical.append({**group[0], 'reported': any(b['reported'] for b in group)})
+        previous = self.birthdays
+        self.birthdays = canonical
+        try:
+            await asyncio.to_thread(self.save_birthdays)
+        except BaseException:
+            self.birthdays = previous
+            raise
+
+    @app_commands.guild_only()
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.command(name="birthday_add", description="誕生日を1件追加します")
+    async def birthday_add(self, interaction: discord.Interaction, character_id: str, name: str, month: int, day: int):
+        await interaction.response.defer(ephemeral=True)
+        async with self._data_lock:
+            record = normalize(dict(character_id=character_id, name=name, month=month, day=day, reported=False))
+            if any(b['character_id'] == record['character_id'] for b in self.birthdays):
+                raise ValueError("同じキャラクターIDが既に登録されています")
+            await self._replace_birthdays([*self.birthdays, record])
+        await interaction.followup.send("誕生日を追加しました。", ephemeral=True)
+
+    @app_commands.guild_only()
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.command(name="birthday_edit", description="キャラクターIDを指定して誕生日を編集します")
+    async def birthday_edit(self, interaction: discord.Interaction, character_id: str, name: Optional[str] = None,
+                            month: Optional[int] = None, day: Optional[int] = None):
+        await interaction.response.defer(ephemeral=True)
+        async with self._data_lock:
+            matches = [b for b in self.birthdays if b['character_id'] == character_id.strip()]
+            if not matches or len({(b['month'], b['day']) for b in matches}) != 1:
+                raise ValueError("一致する誕生日が1件ではありません。一括更新で整理してください")
+            changes = {key: value for key, value in dict(name=name, month=month, day=day).items() if value is not None}
+            original = matches[0]
+            record = normalize({**original, **changes})
+            if (record['month'], record['day']) != (original['month'], original['day']):
+                record['reported'] = False
+            else:
+                record['reported'] = any(b.get('reported', False) for b in matches)
+            # Old same-day duplicates describe one character, so edit them as one record.
+            await self._replace_birthdays([b for b in self.birthdays if b not in matches] + [record])
+        await interaction.followup.send("誕生日を編集しました。", ephemeral=True)
+
+    @app_commands.guild_only()
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.command(name="birthday_delete", description="キャラクターIDを指定して誕生日を削除します（confirm:trueで確定）")
+    async def birthday_delete(self, interaction: discord.Interaction, character_id: str, confirm: bool = False):
+        await interaction.response.defer(ephemeral=True)
+        async with self._data_lock:
+            matches = [b for b in self.birthdays if b['character_id'] == character_id.strip()]
+            if not matches:
+                raise ValueError("指定したキャラクターIDは見つかりません")
+            if not confirm:
+                await interaction.followup.send(f"削除対象: #{character_id} の{len(matches)}件。confirm:trueで確定してください。", ephemeral=True)
+                return
+            await self._replace_birthdays([b for b in self.birthdays if b not in matches])
+        await interaction.followup.send("誕生日を削除しました。", ephemeral=True)
+
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Birthday(bot)) 
+    await bot.add_cog(Birthday(bot))

@@ -1,3 +1,4 @@
+import test  # isolate credentials and storage before importing application code
 """
 ボットの基本機能のテスト
 このモジュールは、FunToolsBotクラスの基本機能をテストします。

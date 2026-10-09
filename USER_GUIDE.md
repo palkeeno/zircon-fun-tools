@@ -20,6 +20,10 @@
 
 | コマンド | 説明 | 権限 |
 |---------|------|------|
+| `/help` | コマンドの説明・引数をページ送りで表示 | 全員 |
+| `/remove-role` | 指定ロールを全員から解除（ロールは残す） | ロール管理権限 |
+| `/quote_add` / `/quote_edit` / `/quote_delete` | 名言の個別追加・編集・削除 | 管理者 |
+| `/birthday_add` / `/birthday_edit` / `/birthday_delete` | 誕生日の個別追加・編集・削除 | 管理者 |
 | `/birthday` | 誕生日一覧を表示・検索 | 全員 |
 | `/birthday_update` | 誕生日データを一括更新 | 管理者 |
 | `/birthday_toggle` | 誕生日自動投稿のON/OFF | 管理者 |
@@ -43,10 +47,11 @@ Zirconキャラクターの誕生日を管理し、自動でお祝いメッセ�
 ### `/birthday` - 誕生日を検索・一覧表示
 
 ```
-/birthday [id_or_name]
+/birthday [id_or_name] [mode]
 ```
 
 **パラメータ:**
+- `mode`（オプション）: 一覧 / 今日 / 今月 / 次に来る順。今日・今月は日本時間。
 - `id_or_name`（オプション）: キャラクターIDまたは名前で検索
 
 **使用例:**
@@ -360,3 +365,20 @@ speaker,text,character_id
 ---
 
 **最終更新日**: 2026-01-15
+
+## 新しい操作の例
+
+`/help`でBotに実装された全コマンドを確認できます。ページ送りは表示した本人だけ操作できます。
+
+- `/quote keyword:id-123`: 名言IDを検索。キャラクターID・発言者・本文も検索対象です。全件をページ送りできます。
+- `/quote_add speaker:リオン text:この勝負、もらった！ character_id:123`: 必須項目を検証して追加し、名言IDを返します。
+- `/quote_edit quote_id:<名言ID> text:<新しい本文>`: IDと作成者・作成日時を維持して編集します。
+- `/quote_edit quote_id:<名言ID> clear_character:true`: キャラクターの紐付けを解除します。
+- `/quote_delete quote_id:<名言ID>`: 対象を確認。`confirm:true`を指定して確定します。
+- `/birthday mode:今日` / `/birthday mode:今月` / `/birthday mode:次に来る順`: 目的に合わせて一覧表示します。
+- `/birthday_add character_id:123 name:リオン month:2 day:29`: 誕生日を追加します。編集・削除は同じcharacter_idを指定します。
+- `/remove-role role:@参加者`: 件数を確認後、本人の「全員から解除する」ボタンで実行します。ロール管理権限とBot/自分のロール階層が必要です。Botを含む全メンバーから解除し、ロールそのものは残ります。
+
+誕生日画像が取得できないときも、文字だけでお祝いが届きます。抽選開始者とBotは抽選対象に含みません。ポスターは受付順に生成し、同じキャラクターの進行中の生成をまとめます。待ち行列が満杯なら時間をおいて再実行してください。
+
+一括更新は不正な行を含むと全体を拒否します。CSVで名言を編集してIDを維持する場合は、`id,speaker,text,character_id`のヘッダーを利用してください。IDなしは内容が変わらない名言だけ照合されます。

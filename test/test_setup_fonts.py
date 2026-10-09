@@ -1,3 +1,4 @@
+import test  # isolate credentials and storage before importing application code
 """フォントセットアップ機能のテスト
 
 開発環境でLinux環境をシミュレートしてテストします。

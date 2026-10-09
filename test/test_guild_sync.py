@@ -1,3 +1,4 @@
+import test  # isolate application settings before imports
 import asyncio
 import datetime
 import io

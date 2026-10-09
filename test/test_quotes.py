@@ -1,3 +1,4 @@
+import test  # isolate credentials and storage before importing application code
 import datetime
 import os
 import tempfile

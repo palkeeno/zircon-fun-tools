@@ -128,7 +128,7 @@ speaker,text[,character_id]
 ## セットアップ
 
 ### 必要な環境
-- Python 3.10以上
+- Python 3.10以上（推奨3.12）
 - pip（Pythonパッケージマネージャー）
 - Discord Bot アカウント（[Discord Developer Portal](https://discord.com/developers/applications)で作成）
 
@@ -273,6 +273,7 @@ POSTER_CHANNEL_ID=0
 ### 実行方法
 
 ```bash
+python setup_fonts.py --prepare
 python main.py
 ```
 
@@ -291,7 +292,7 @@ INFO - スラッシュコマンド同期完了: X個
 
 **Bot が起動しない場合:**
 - `.env` ファイルのトークンが正しいか確認
-- Python 3.10以上がインストールされているか確認
+- Python 3.10以上（推奨3.12）がインストールされているか確認
 - `pip install -r requirements.txt` を再実行
 
 **スラッシュコマンドが表示されない場合:**
@@ -348,25 +349,20 @@ zircon-fun-tools/
 - エラー発生時は適切なエラーメッセージが表示されます
 - トークンが無効な場合は起動時にエラーを表示
 
-## サーバー運用（自動再起動）
+## サーバー運用（systemdに統一）
 
-本番サーバーでBotを運用する場合、`scripts/` ディレクトリのスクリプトを使用して自動再起動を設定できます：
+本番の再起動・プロセス管理はsystemdだけで行います。Python内の再起動ループ、nohup起動、watchdog、監視cronは併用しません。
 
 ```bash
-# スクリプトに実行権限を付与
-chmod +x scripts/*.sh
-
-# Botを起動
-./scripts/start_bot.sh
-
-# 状態確認
-./scripts/check_bot.sh
-
-# 自動再起動（watchdog）をバックグラウンドで起動
-nohup ./scripts/watchdog.sh &
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python setup_fonts.py --prepare
+bash scripts/install_service.sh
+sudo systemctl status zircon-bot.service
+sudo journalctl -u zircon-bot.service -f
 ```
 
-詳細は `EC2_SETUP.md` の「自動再起動の設定」セクションを参照してください。
+既存のwatchdogプロセス・監視cron・nohup起動を停止してから移行してください。インストーラーはbot.pidやこのプロジェクトの監視cronが残っていると停止します。手順は [EC2_SETUP.md](EC2_SETUP.md) を参照してください。
 
 ## ライセンス
 
@@ -397,6 +393,54 @@ palkeeno
 - 画像取得は1回あたり接続・読込待ち20秒、10 MiBまで、25百万画素まで。総取得時間も読込の合間にチェックします。一時的な通信エラー・HTTP 5xxだけ最大2回試行します。HTMLなど不正な画像や取得途中のファイルはキャッシュに登録しません。
 - ポスターは生成要求を受け付け、1件ずつ処理します。画像取得・Selenium・画像合成はワーカースレッドで実行し、出力は要求ごとのメモリに保持します。共有の `poster_output.png` / `POSTER_DST_PATH` には書き込みません。日本語フォントの取得にも時間・サイズ制限を設け、検証後に保存します。
 
+## コミュニティ運用コマンド
+
+- `/help`: 実際にロードされたコマンドの説明・引数・既定権限をページ送りで確認。
+- `/quote keyword:<ID/キャラクターID/発言者/本文>`: 全件と検索結果にページ送り。
+- `/quote_add speaker:<名前> text:<本文> [character_id]`: 名言を個別追加。
+- `/quote_edit quote_id:<ID> [speaker] [text] [character_id] [clear_character]`: 指定した項目のみ編集。キャラクター解除はclear_character:true。
+- `/quote_delete quote_id:<ID> [confirm]`: 初回は削除対象を確認し、confirm:trueで削除。
+- `/birthday mode:<一覧/今日/今月/次に来る順> [id_or_name]`: 日本時間で絞り込み・並び替え。2月29日の次回日は次の閏年として計算。
+- `/birthday_add character_id:<ID> name:<名前> month:<月> day:<日>`: 個別追加。
+- `/birthday_edit character_id:<ID> [name] [month] [day]`: 個別編集。
+- `/birthday_delete character_id:<ID> [confirm]`: confirm:trueで当該IDの誕生日を削除。
+- `/remove-role role:<ロール>`: ロール管理権限・階層を確認し、本人の確認ボタンで全メンバー（Bot含む）から解除。ロール自体は削除しません。取得は全メンバー一覧から行い、成功・失敗件数を表示します。
+
+名言・誕生日の管理系コマンドは既定で管理者のみ利用できます。運用ロールへの許可はDiscordの「連携 > アプリ」で変更できます。`/lottery`はBotと抽選開始者を対象から除外します。
+
+### データの検証とID維持
+
+名言のspeakerは空でない150文字以内、textは空でない4000文字以内の文字列です。character_idは任意の20桁以内の半角数字。CSV/JSONの全行を検証し、1行でも不正なら全置換しません。JSONは従来の配列とエクスポート形式`{"quotes": [...]}`に対応します。
+
+一括更新は明示IDで既存名言と照合します。IDなしの場合は発言者・本文・キャラクターIDの完全一致で照合し、複数一致ならIDの指定を求めます。照合できた名言のID・created_by・created_atを維持し、本文等が変わった場合だけupdated_atを更新します。既存の作成履歴がない場合は過去の日時を捏造せず未記録のまま扱います。旧ファイルのID欠落は初回読込時にUUIDを付与して保存します。
+
+読込時にも型・必須項目・日付・重複IDを検証します。不正な名言は`.rejected.json`へ記録し、元ファイルを保持して有効な名言だけを使用します。この状態では個別追加・編集・削除を拒否し、修正ファイルによる明示的な全置換後に個別更新を再開します。不正な誕生日は同ファイルへ記録し、その機能のロードを止めます（通知済み状態の保存による元データの上書きを防止）。JSON全体が壊れている場合は上書きせず、ログを確認して修正してください。
+
+誕生日の画像取得に失敗しても文字だけでお祝いを送信し、Discord送信成功時だけ通知済みとします。
+
+### ポスターの待ち行列とキャッシュ
+
+- `POSTER_CONCURRENCY`: 同時生成数（既定1、範囲1〜4）。
+- `POSTER_QUEUE_LIMIT`: 待ち件数上限（既定10、範囲1〜50）。満杯のときは受付を拒否。
+- `POSTER_CACHE_TTL`: キャラクター情報・完成画像の有効秒数（既定86400、最小60）。
+
+同じキャラクターへの進行中の要求は1つにまとめ、完了画像をそれぞれ返します。10分を超える待ち時間は案内し、処理が後で完成すればキャッシュを再利用できます。キャッシュは`data/cache/posters`に永続化し、上限200ファイルに保ちます。コード・画像アセット・フォント設定の変更は完成画像のキーへ反映します。生のキャラクター画像キャッシュは従来どおり共有します。
+
+日本語フォントは`python setup_fonts.py --prepare`で事前準備します。生成中にダウンロードやシステムパッケージのインストールは行いません。既存フォントがない場合だけセットアップ時にNoto Sans JPを取得します。
+
+### テスト
+
+```bash
+python test/run_tests.py
+# 直接実行も一時設定・一時データに分離されます
+python -m unittest discover test
+```
+
+認証設定ファイル・保存ディレクトリを切り替える場合は`ZFT_ENV_FILE`、`ZFT_DATA_DIR`を利用できます。テストはその両方とDiscord設定を一時値へ置換し、Botログインと外部サービスへの実通信は行いません（ローカルHTTPサーバーを使うテストはあります）。CIではPython 3.10/3.12、Windows/Ubuntuを検証します。
 ### 単一サーバーへの同期
 
 対象サーバーへの同期成功後に旧グローバル登録を削除します。機能ロード・同期に失敗した場合は、不完全なコマンド一覧へ更新しません。対象外サーバー・DMではコマンドを実行できません。反映にはBotの再起動が必要です。
+
+誕生日の新規追加・全置換はキャラクターIDを一意にします。旧データの同ID・同日付の重複は通知時に1件として扱い、個別編集では1件へまとめます。同IDに異なる日付があるファイルは読込時に報告して保護します。当日分の通知が完了した後でも、追加・日付変更・全置換で未通知の当日分が生じた場合は次のチェックで通知します。全置換時も同じID・日付の送信済み状態を引き継ぎ、既に祝ったキャラクターは再投稿しません。
+
+完成ポスターを再利用する前にキャラクター情報の有効期限を確認し、情報の更新内容もキャッシュキーへ含めます。サービスインストーラーの再実行は、設定ファイルの再読込後にサービスを明示的に再起動し、稼働中のプロセスにも新しい設定を反映します。

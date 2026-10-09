@@ -9,26 +9,13 @@ import logging
 import traceback
 import sys
 import asyncio
-import time
-import setup_fonts
+from command_errors import send_error
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# 再接続設定
-MAX_RETRIES = 5  # 最大再試行回数
-RETRY_DELAY_BASE = 30  # 基本待機時間（秒）
-RETRY_DELAY_MAX = 300  # 最大待機時間（秒）
-
-# import 時にフォントのインストールを実行しない。
-if __name__ == '__main__':
-    if config.GUILD_ID <= 0:
-        logger.error("GUILD_ID_DEV / GUILD_ID_PROD に対象サーバーIDを設定してください")
-        sys.exit(1)
-    setup_fonts.setup_fonts_if_needed()
 
 class FunToolsBot(commands.Bot):
     def __init__(self):
@@ -43,7 +30,9 @@ class FunToolsBot(commands.Bot):
             'cogs.oracle',
             'cogs.lottery',
             'cogs.poster',
-            'cogs.quotes'
+            'cogs.quotes',
+            'cogs.help',
+            'cogs.role_tools'
         ]
 
     async def setup_hook(self):
@@ -69,17 +58,7 @@ class FunToolsBot(commands.Bot):
         return False
 
     async def on_tree_error(self, interaction, error):
-        if isinstance(error, discord.app_commands.MissingPermissions):
-            message = "このコマンドはサーバー管理者のみ実行できます。"
-        elif isinstance(error, discord.app_commands.NoPrivateMessage):
-            message = "このコマンドはサーバー内で実行してください。"
-        else:
-            logger.error("スラッシュコマンドエラー", exc_info=error)
-            message = "処理中にエラーが発生しました。管理者にお問い合わせください。"
-        if interaction.response.is_done():
-            await interaction.followup.send(message, ephemeral=True)
-        else:
-            await interaction.response.send_message(message, ephemeral=True)
+        await send_error(interaction, error)
 
     async def on_ready(self):
         logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
@@ -96,71 +75,24 @@ class FunToolsBot(commands.Bot):
         logger.error(f'コマンドエラー: {error}')
         logger.error(traceback.format_exc())
 
-try:
-    bot = FunToolsBot()
-except Exception as e:
-    logger.error(f'Failed to initialize bot: {e}')
-    logger.error(traceback.format_exc())
-    sys.exit(1)
-
 async def main():
+    # Importing main/config must not validate secrets, install fonts or create a Bot.
+    token = config.get_token()
+    async with FunToolsBot() as bot:
+        await bot.start(token)
+
+
+def run():
     try:
-        async with bot:
-            await bot.start(config.TOKEN)
-    except asyncio.CancelledError:
-        # Silent cancellation (Ctrl+C)
-        logger.info('シャットダウン要求を受け取りました (Cancelled).')
+        asyncio.run(main())
+        return 0
     except KeyboardInterrupt:
-        logger.info('停止要求を受信しました (Ctrl+C). 終了します。')
-    finally:
-        pass
+        logger.info("Bot stopped")
+        return 0
+    except Exception:
+        logger.exception("Bot terminated; systemd supervises production restarts")
+        return 1
+
 
 if __name__ == '__main__':
-    retry_count = 0
-    
-    while retry_count < MAX_RETRIES:
-        try:
-            # Botインスタンスを再作成（再試行時）
-            if retry_count > 0:
-                logger.info(f"Botインスタンスを再作成します (試行 {retry_count + 1}/{MAX_RETRIES})")
-                bot = FunToolsBot()
-            
-            asyncio.run(main())
-            break  # 正常終了した場合はループを抜ける
-            
-        except discord.LoginFailure:
-            logger.error('無効なトークンです。.envファイルを確認してください。')
-            sys.exit(1)  # トークンエラーは再試行しない
-            
-        except KeyboardInterrupt:
-            logger.info('停止しました。')
-            sys.exit(0)
-            
-        except (discord.ConnectionClosed, discord.GatewayNotFound, 
-                discord.HTTPException, OSError) as e:
-            # ネットワーク関連エラーは再試行
-            retry_count += 1
-            delay = min(RETRY_DELAY_BASE * retry_count, RETRY_DELAY_MAX)
-            
-            logger.warning(f'接続エラーが発生しました: {e}')
-            
-            if retry_count < MAX_RETRIES:
-                logger.info(f'{delay}秒後に再接続を試みます (試行 {retry_count}/{MAX_RETRIES})')
-                time.sleep(delay)
-            else:
-                logger.error(f'最大再試行回数 ({MAX_RETRIES}) に達しました。終了します。')
-                sys.exit(1)
-                
-        except Exception as e:
-            retry_count += 1
-            delay = min(RETRY_DELAY_BASE * retry_count, RETRY_DELAY_MAX)
-            
-            logger.error(f'予期しないエラー: {e}')
-            logger.error(traceback.format_exc())
-            
-            if retry_count < MAX_RETRIES:
-                logger.info(f'{delay}秒後に再起動を試みます (試行 {retry_count}/{MAX_RETRIES})')
-                time.sleep(delay)
-            else:
-                logger.error(f'最大再試行回数 ({MAX_RETRIES}) に達しました。終了します。')
-                sys.exit(1)
+    sys.exit(run())
