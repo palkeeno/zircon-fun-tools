@@ -229,7 +229,7 @@ def save_data(data):
 ### テストの実行
 
 ```bash
-python -m unittest discover test
+python test/run_tests.py
 # または
 python test/run_tests.py
 ```
@@ -447,7 +447,7 @@ python main.py
 
 ```bash
 # すべてのテストを実行
-python -m unittest discover test
+python test/run_tests.py
 
 # 特定のテストのみ実行
 python -m unittest test.test_cogs.TestBirthday
@@ -481,3 +481,5 @@ pip freeze > requirements.txt
 ---
 
 **最終更新日**: 2026-01-15
+
+画像取得は `config.IMAGE_CACHE` を共有し、同期I/O・画像合成はワーカースレッドへ移します。JSON保存は `utils.atomic_write_json()` を使います。単一サーバー用のため、対象 `GUILD_ID` 未設定時は起動・同期を拒否します。管理コマンドは `default_permissions` による初期権限のみ設定し、運用上の許可はDiscord側で管理します。

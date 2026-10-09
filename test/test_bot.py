@@ -34,12 +34,14 @@ class TestFunToolsBot(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.bot.intents.message_content)
         self.assertTrue(self.bot.intents.members)
 
+    @patch.object(config, 'GUILD_ID', 123)
     @patch('discord.ext.commands.Bot.load_extension')
     async def test_setup_hook(self, mock_load_extension):
         """setup_hookのテスト"""
         # モックの設定
         self.bot.tree.sync = AsyncMock()
         mock_load_extension.return_value = None
+        self.bot.tree.sync.return_value = []
 
         # テスト実行
         await self.bot.setup_hook()
