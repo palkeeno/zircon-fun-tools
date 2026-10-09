@@ -66,3 +66,6 @@ data/*.json.bak
 # Persistent downloaded assets
 data/cache/
 data/fonts/
+
+# Administrator restore snapshots
+data/backups/
