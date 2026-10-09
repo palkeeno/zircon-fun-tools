@@ -19,6 +19,7 @@ from discord.ext import commands, tasks
 
 import config
 import utils
+from cogs.admin_panel import AdminPanel
 
 logger = logging.getLogger(__name__)
 # 環境に依存しないパス構築
@@ -342,11 +343,7 @@ class Quotes(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-    @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.command(name="quote_update", description="ファイルから名言データを一括更新します（全置換）")
-    @app_commands.describe(file="更新用ファイル（CSV/JSON）")
-    async def quote_update(self, interaction: discord.Interaction, file: discord.Attachment):
+    async def _quote_update(self, interaction: discord.Interaction, file: discord.Attachment):
         """CSV/JSONファイルから名言を一括更新（全置換）します。"""
 
         await interaction.response.defer(ephemeral=True)
@@ -438,33 +435,11 @@ class Quotes(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.command(name="quote_toggle", description="名言の定期投稿をON/OFFします")
-    @app_commands.describe(enabled="true で有効化、false で無効化")
-    async def quote_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
-        await self._change_settings({"enabled": bool(enabled)})
-        state = "有効" if enabled else "無効"
-        await interaction.response.send_message(f"名言の定期投稿を{state}にしました。", ephemeral=True)
-
-    @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.command(name="quote_schedule", description="名言の定期投稿スケジュールを設定します")
-    @app_commands.describe(
-        days="何日おきに投稿するか (1以上の整数)",
-        hour="投稿時刻 (0-23)",
-        minute="投稿時刻 (0-59)",
-    )
-    async def quote_schedule(self, interaction: discord.Interaction, days: int, hour: int, minute: int) -> None:
-        """名言の定期投稿スケジュールを設定するコマンド."""
-
-        if days < 1 or not (0 <= hour <= 23) or not (0 <= minute <= 59):
-            await interaction.response.send_message("入力値が不正です。日数は1以上、時刻は0-23/0-59で指定してください。", ephemeral=True)
-            return
-
-        await self._change_settings({"days": days, "hour": hour, "minute": minute, "last_posted_at": None})
-
-        await interaction.response.send_message(
-            f"投稿スケジュールを {days}日おき {hour:02d}:{minute:02d} に設定しました。", ephemeral=True
-        )
+    @app_commands.command(name="quote_admin", description="名言の管理（自動投稿・スケジュール・データ更新）")
+    @app_commands.describe(file="全置換用のCSV/JSON（省略すると設定の操作パネルを表示）")
+    async def quote_admin(self, interaction: discord.Interaction, file: Optional[discord.Attachment] = None):
+        panel = AdminPanel(self, "quote", interaction.user.id, file)
+        await interaction.response.send_message(embed=panel.embed(), view=panel, ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:

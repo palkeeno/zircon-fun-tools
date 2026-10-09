@@ -13,6 +13,7 @@ import datetime
 import os
 import config
 import utils
+from cogs.admin_panel import AdminPanel
 
 import csv
 import io
@@ -389,11 +390,7 @@ class Birthday(commands.Cog):
             await interaction.followup.send(embed=embed)
 
 
-    @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.command(name="birthday_update", description="ファイルからデータを一括更新します（全置換）")
-    @app_commands.describe(file="更新用ファイル（CSV/JSON）")
-    async def birthday_update(self, interaction: discord.Interaction, file: discord.Attachment):
+    async def _birthday_update(self, interaction: discord.Interaction, file: discord.Attachment):
         """
         運営専用: アップロードされたファイルの内容で誕生日リストを完全に置き換えます。
         対応フォーマット:
@@ -488,46 +485,12 @@ class Birthday(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.command(
-        name="birthday_toggle",
-        description="誕生日の自動投稿をON/OFFします"
-    )
-    @app_commands.describe(enabled="true で有効化、false で無効化")
-    async def birthday_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
-        """誕生日の自動投稿機能を切り替えるコマンド."""
+    @app_commands.command(name="birthday_admin", description="誕生日の管理（自動投稿・スケジュール・データ更新）")
+    @app_commands.describe(file="全置換用のCSV/JSON（省略すると設定の操作パネルを表示）")
+    async def birthday_admin(self, interaction: discord.Interaction, file: Optional[discord.Attachment] = None):
+        panel = AdminPanel(self, "birthday", interaction.user.id, file)
+        await interaction.response.send_message(embed=panel.embed(), view=panel, ephemeral=True)
 
-        updated = {"enabled": bool(enabled)}
-        if enabled:
-            updated["last_announced_date"] = None
-        await self._change_settings(updated)
-        status = "有効" if enabled else "無効"
-        await interaction.response.send_message(
-            f"誕生日の自動投稿を{status}にしました。",
-            ephemeral=True,
-        )
-
-    @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.command(
-        name="birthday_schedule",
-        description="誕生日の自動投稿時刻を設定します (時のみ指定)"
-    )
-    @app_commands.describe(hour="自動投稿する時刻 (0-23)")
-    async def birthday_schedule(self, interaction: discord.Interaction, hour: int) -> None:
-        """誕生日の自動投稿時刻を設定するコマンド."""
-
-        if hour < 0 or hour > 23:
-            await interaction.response.send_message(
-                "時刻は0-23の範囲で指定してください。",
-                ephemeral=True,
-            )
-            return
-
-        await self._change_settings({"hour": hour})
-        await interaction.response.send_message(
-            f"誕生日の自動投稿時刻を {hour:02d}:00 に設定しました。",
-            ephemeral=True,
-        )
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Birthday(bot)) 

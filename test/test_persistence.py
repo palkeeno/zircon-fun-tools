@@ -98,6 +98,6 @@ class SettingsPersistenceTests(unittest.IsolatedAsyncioTestCase):
         interaction.followup = AsyncMock()
         file = MagicMock(filename="data.json")
         file.read = AsyncMock(return_value=b'[{"speaker":"new","text":"new"}]')
-        await Quotes.quote_update.callback(cog, interaction, file)
+        await Quotes._quote_update(cog, interaction, file)
         self.assertIs(cog.quotes, original)
         self.assertNotIn("全置換しました", interaction.followup.send.call_args.args[0])
