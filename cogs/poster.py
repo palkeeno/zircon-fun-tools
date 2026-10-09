@@ -44,7 +44,7 @@ class Poster(commands.Cog):
         self.brave_path = config.POSTER_BRAVE_PATH
         self.glory_path = config.POSTER_GLORY_PATH
         self.freedom_path = config.POSTER_FREEDOM_PATH
-        self.assets_dir = Path(__file__).resolve().parent.parent / "data" / "assets"
+        self.assets_dir = Path(config._ASSETS_DIR)
         self._queue = asyncio.Queue(maxsize=config.POSTER_QUEUE_LIMIT)
         self._workers = []
         self._inflight = {}

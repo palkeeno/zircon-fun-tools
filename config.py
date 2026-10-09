@@ -192,7 +192,7 @@ BIRTHDAY_CHANNEL_ID = int(os.getenv('BIRTHDAY_CHANNEL_ID_DEV' if ENV == 'develop
 
 # Posterコマンド用の画像・フォント・チャンネル設定
 # アセットディレクトリのベースパス
-_ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'data', 'assets')
+_ASSETS_DIR = os.path.join(_DATA_DIR, 'assets')
 POSTER_MASK_PATH = os.getenv('POSTER_MASK_PATH', os.path.join(_ASSETS_DIR, 'mask.png'))
 POSTER_PEACEFUL_PATH = os.getenv('POSTER_PEACEFUL_PATH', os.path.join(_ASSETS_DIR, 'peaceful.png'))
 POSTER_BRAVE_PATH = os.getenv('POSTER_BRAVE_PATH', os.path.join(_ASSETS_DIR, 'brave.png'))

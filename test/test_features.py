@@ -583,6 +583,15 @@ class CacheFeatureTests(unittest.TestCase):
 
 
 class HelpAndErrorTests(unittest.IsolatedAsyncioTestCase):
+    def test_test_bootstrap_isolates_all_default_image_assets(self):
+        directory = Path(config._DATA_DIR).resolve()
+        self.assertNotEqual(directory, Path(config.__file__).resolve().parent / 'data')
+        for path in [config.POSTER_MASK_PATH, config.POSTER_PEACEFUL_PATH, config.POSTER_BRAVE_PATH,
+                     config.POSTER_GLORY_PATH, config.POSTER_FREEDOM_PATH]:
+            self.assertTrue(Path(path).resolve().is_relative_to(directory))
+        cog = Poster(MagicMock())
+        self.assertEqual(cog.assets_dir.resolve(), directory / 'assets')
+
     async def test_lottery_excludes_invoker_and_bots(self):
         item = interaction()
         role = MagicMock()
