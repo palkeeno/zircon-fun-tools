@@ -26,9 +26,17 @@ Base: latest `origin/main` at `435a375` (including the target-guild synchronizat
 
 ## Verification
 
-- Windows / Python 3.11: 93 tests pass through `python test/run_tests.py`.
+- Windows / Python 3.11: 97 tests pass through `python test/run_tests.py`.
 - Direct `python -m unittest discover test`: same suite, disposable configuration and data.
 - Bash syntax checks for scripts; installer exercised with fake sudo/systemctl/crontab, including a path containing spaces and `%` and a legacy-PID refusal.
 - CI: Windows/Ubuntu and Python 3.10/3.12 (results must be checked on the PR head).
 
 No production service was changed. Real Discord delivery, live role changes and the current official character site are outside the local test evidence. systemd migration requires stopping old supervisors before the documented installer is run.
+
+## Review fixes
+
+- Block quote CRUD after rejected rows are detected, until a validated explicit full replacement succeeds; failed replacement preserves the guard.
+- Include dynamically selected country-flag assets in the completed-poster cache fingerprint (additions, replacement, deletion).
+- Finish shutdown even if an in-flight poster thread fails during cancellation.
+
+Each path has an executable regression test in test_features.py.

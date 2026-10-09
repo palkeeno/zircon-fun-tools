@@ -43,6 +43,7 @@ class Poster(commands.Cog):
         self.brave_path = config.POSTER_BRAVE_PATH
         self.glory_path = config.POSTER_GLORY_PATH
         self.freedom_path = config.POSTER_FREEDOM_PATH
+        self.assets_dir = Path(__file__).resolve().parent.parent / "data" / "assets"
         self._queue = asyncio.Queue(maxsize=config.POSTER_QUEUE_LIMIT)
         self._workers = []
         self._inflight = {}
@@ -145,7 +146,7 @@ class Poster(commands.Cog):
                 if v and v not in seen:
                     variants.append(v)
                     seen.add(v)
-            assets_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'assets')
+            assets_dir = str(self.assets_dir)
             for base in variants:
                 candidate = os.path.join(assets_dir, f"{base}.png")
                 if os.path.exists(candidate):
@@ -601,6 +602,10 @@ class Poster(commands.Cog):
                   config.get_character_image_url(character_id), Path(__file__).read_bytes().hex()]
         for path in [self.mask_path, self.peaceful_path, self.brave_path, self.glory_path, self.freedom_path]:
             pieces.append(Path(path).read_bytes().hex() if os.path.isfile(path) else "missing")
+        # _draw_poster also selects flags by the scraped country name. Additions,
+        # removals and content changes in this directory must invalidate the PNG.
+        for flag in sorted(self.assets_dir.glob("*.png")):
+            pieces.extend([flag.name, hashlib.sha256(flag.read_bytes()).hexdigest()])
         for preferred in [config.POSTER_FONT_A, config.POSTER_FONT_B, config.POSTER_FONT_C, config.POSTER_FONT_D]:
             font = setup_fonts.find_japanese_font(preferred)
             pieces.append(preferred)
@@ -651,6 +656,8 @@ class Poster(commands.Cog):
                     # A thread cannot be stopped. Retain the slot until it finishes.
                     try:
                         await worker
+                    except Exception:
+                        logger.exception("Poster worker failed while shutting down")
                     finally:
                         if not future.done():
                             future.cancel()

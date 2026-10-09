@@ -44,6 +44,7 @@ class Quotes(commands.Cog):
         self.quotes: List[Dict] = []
         self.settings: Dict[str, Any] = {}
         self._task_started = False
+        self._has_rejected_rows = False
         self._load_data()
         self.settings = self._load_settings()
         logger.info("Quotes が初期化されました")
@@ -104,6 +105,7 @@ class Quotes(commands.Cog):
         self._ensure_data_dir()
 
         if not os.path.exists(self.data_path):
+            self._has_rejected_rows = False
             self.quotes = []
             self._save_data()
             return
@@ -127,6 +129,7 @@ class Quotes(commands.Cog):
             except ValueError as exc:
                 rejected.append({"row": number, "error": str(exc), "record": row})
         self.quotes = valid
+        self._has_rejected_rows = bool(rejected)
         if rejected:
             utils.atomic_write_json(self.data_path + ".rejected.json", rejected)
             logger.warning("Rejected %s invalid quotes; original file preserved", len(rejected))
@@ -135,6 +138,8 @@ class Quotes(commands.Cog):
 
     def _save_data(self) -> None:
         """Persist quotes to disk."""
+        if getattr(self, "_has_rejected_rows", False):
+            raise ValueError("不正な名言を含むため個別更新できません。.rejected.jsonを確認し、修正したファイルで全置換してください")
         self._ensure_data_dir()
         payload = {
             "quotes": self.quotes,
@@ -305,13 +310,18 @@ class Quotes(commands.Cog):
                    for key in ("speaker", "text", "id", "character_id"))]
         await self._show_records(interaction, matches, "🔍 名言検索結果")
 
-    async def _replace_records(self, records):
+    async def _replace_records(self, records, *, full_replace=False):
+        rejected = getattr(self, "_has_rejected_rows", False)
+        if rejected and not full_replace:
+            raise ValueError("不正な名言を含むため個別更新できません。.rejected.jsonを確認し、修正したファイルで全置換してください")
         previous = self.quotes
         self.quotes = records
+        self._has_rejected_rows = False
         try:
             await asyncio.to_thread(self._save_data)
         except BaseException:
             self.quotes = previous
+            self._has_rejected_rows = rejected
             raise
 
     @app_commands.guild_only()
@@ -328,7 +338,7 @@ class Quotes(commands.Cog):
             rows = parse_upload(await file.read(), file.filename)
             async with self._data_lock:
                 records = merge_records(rows, self.quotes, interaction.user.id, _now(self.tz).isoformat())
-                await self._replace_records(records)
+                await self._replace_records(records, full_replace=True)
             await interaction.followup.send(f"名言データを全置換しました ({len(records)}件)。", ephemeral=True)
         except (ValueError, UnicodeError) as exc:
             await interaction.followup.send(f"更新しませんでした: {exc}", ephemeral=True)

@@ -150,6 +150,33 @@ class QuoteCommandsTests(unittest.IsolatedAsyncioTestCase):
         self.cog._load_data()
         self.assertEqual(self.cog.quotes[0]['id'], identity)
 
+    async def test_rejected_rows_block_crud_until_explicit_validated_replacement(self):
+        path = Path(self.cog.data_path)
+        path.write_text('[{"id":"valid","speaker":"A","text":"ok"},null]')
+        original = path.read_bytes()
+        self.cog._load_data()
+        await Quotes.quote_add.callback(self.cog, self.item, 'B', 'new')
+        await Quotes.quote_edit.callback(self.cog, self.item, 'valid', text='changed')
+        with self.assertRaises(ValueError):
+            await Quotes.quote_delete.callback(self.cog, self.item, 'valid', confirm=True)
+        self.assertEqual(path.read_bytes(), original)
+        self.assertEqual(len(self.cog.quotes), 1)
+        upload = MagicMock(filename='quotes.json', size=60)
+        upload.read = AsyncMock(return_value=b'[{"id":"valid","speaker":"A","text":"repaired"}]')
+        await Quotes.quote_update.callback(self.cog, self.item, upload)
+        self.assertFalse(self.cog._has_rejected_rows)
+        await Quotes.quote_add.callback(self.cog, self.item, 'B', 'new')
+        self.assertEqual(len(self.cog.quotes), 2)
+
+    async def test_failed_full_replacement_keeps_rejected_guard(self):
+        self.cog._has_rejected_rows = True
+        original = self.cog.quotes
+        with patch.object(self.cog, '_save_data', side_effect=OSError('failed')):
+            with self.assertRaises(OSError):
+                await self.cog._replace_records([dict(speaker='A', text='ok')], full_replace=True)
+        self.assertTrue(self.cog._has_rejected_rows)
+        self.assertIs(self.cog.quotes, original)
+
     async def test_missing_legacy_ids_migrated_once_and_malformed_file_preserved(self):
         path = Path(self.cog.data_path)
         path.write_text('[{"speaker":"A","text":"ok"}]')
@@ -296,6 +323,23 @@ class RoleTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PosterQueueTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failing_thread_during_shutdown_does_not_restart_worker_loop(self):
+        entered, release = threading.Event(), threading.Event()
+        def render(cid):
+            entered.set()
+            release.wait(2)
+            raise OSError('thread failed during shutdown')
+        with patch.object(self.cog, '_render_poster', side_effect=render):
+            caller = asyncio.create_task(Poster.poster.callback(self.cog, interaction(), '123'))
+            while not entered.is_set(): await asyncio.sleep(0.001)
+            stopping = asyncio.create_task(self.cog.cog_unload())
+            await asyncio.sleep(0.01)
+            release.set()
+            await asyncio.wait_for(stopping, timeout=1)
+            await asyncio.gather(caller, return_exceptions=True)
+        self.assertTrue(all(worker.done() for worker in self.cog._workers))
+        self.assertEqual(self.cog._inflight, {})
+
     async def test_configured_concurrency_and_shutdown_wait_for_threads(self):
         active, peak = 0, 0
         ready, release = threading.Event(), threading.Event()
@@ -366,6 +410,35 @@ class PosterQueueTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CacheFeatureTests(unittest.TestCase):
+    def test_dynamic_country_flags_add_replace_remove_invalidate_png(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            assets = root / 'assets'
+            assets.mkdir()
+            source = root / 'source.png'
+            Image.new('RGB', (8, 8)).save(source)
+            with patch.object(config, '_DATA_DIR', directory), patch('setup_fonts.find_japanese_font', return_value=None), \
+                 patch.object(config.IMAGE_CACHE, 'get_sync', return_value=source), \
+                 patch.object(Poster, '_scrape_character_info', return_value={'name': 'A', 'country': 'Peaceful'}) as scrape, \
+                 patch.object(Poster, '_draw_poster', side_effect=lambda *args: Image.new('RGB', (1600, 2100))) as draw:
+                cog = Poster(MagicMock())
+                cog.assets_dir = assets
+                cog._render_poster('123')
+                cog._render_poster('123')
+                self.assertEqual(draw.call_count, 1)
+                flag = assets / 'Peaceful.png'
+                flag.write_bytes(b'first flag')
+                cog._render_poster('123')
+                self.assertEqual(draw.call_count, 2)
+                flag.write_bytes(b'replaced flag')
+                cog._render_poster('123')
+                self.assertEqual(draw.call_count, 3)
+                flag.unlink()
+                # Returning to the original assets set can reuse its original cached PNG.
+                cog._render_poster('123')
+                self.assertEqual(draw.call_count, 3)
+                scrape.assert_called_once()
+
     def test_completed_cache_reused_after_restart_and_asset_change_reuses_info(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
