@@ -26,7 +26,7 @@ Base: latest `origin/main` at `435a375` (including the target-guild synchronizat
 
 ## Verification
 
-- Windows / Python 3.11: 106 tests pass through `python test/run_tests.py`.
+- Windows / Python 3.11: 108 tests pass through `python test/run_tests.py`.
 - Direct `python -m unittest discover test`: same suite, disposable configuration and data.
 - Bash syntax checks for scripts; installer exercised with fake sudo/systemctl/crontab, including a path containing spaces and `%` and a legacy-PID refusal.
 - CI: Windows/Ubuntu and Python 3.10/3.12 (results must be checked on the PR head).
@@ -54,3 +54,6 @@ Each path has an executable regression test in test_features.py.
 - Permit birthday CRUD when multiple legacy duplicate groups exist: normalize preserved same-date groups on mutation, retain any successful notification flag, and still reject newly introduced duplicates. Original rows are kept in the atomic-write backup.
 
 - Key loaded font objects by resolved path, requested size, mtime and file size, matching poster fingerprints. A replacement-font regression checks fresh rendering and reuse after restart.
+
+- Derive missing legacy quote IDs from normalized content and valid duplicate-content ordinals, independent of rejected-row positions; removing rejected rows preserves displayed identities.
+- Version persistent character metadata by the source loaded for the deployment, so selector/schema changes refresh metadata before rendering under new code.

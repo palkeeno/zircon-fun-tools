@@ -30,6 +30,9 @@ import tempfile
 from image_cache import download_bytes
 
 logger = logging.getLogger(__name__)
+# Bind metadata to the source loaded for this deployment. Asset changes do not
+# invalidate it, but scraper/selector/schema changes do.
+SCRAPER_VERSION = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
 class Poster(commands.Cog):
     """
@@ -620,10 +623,13 @@ class Poster(commands.Cog):
                 pieces.append(f"{font}:{Path(font).stat().st_mtime_ns}:{Path(font).stat().st_size}")
         return hashlib.sha256("|".join(pieces).encode()).hexdigest()
 
+    def _info_cache_key(self, character_id):
+        return f"{config.get_character_page_url(character_id)}:{SCRAPER_VERSION}"
+
     def _render_poster(self, character_id: str) -> bytes:
         key = self._cache_key(character_id)
         with self._render_locks[int(key[:8], 16) % len(self._render_locks)]:
-            info_key = config.get_character_page_url(character_id)
+            info_key = self._info_cache_key(character_id)
             info = self._cache.get("info", info_key)
             if info is None:
                 info = self._scrape_character_info(character_id)

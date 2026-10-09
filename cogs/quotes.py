@@ -115,16 +115,21 @@ class Quotes(commands.Cog):
         rows = payload if isinstance(payload, list) else payload.get("quotes") if isinstance(payload, dict) else None
         if not isinstance(rows, list):
             raise ValueError("quotes.json must contain a quote list")
-        valid, rejected, seen = [], [], set()
+        valid, rejected, seen, ordinals = [], [], set(), {}
         for number, row in enumerate(rows, 1):
             try:
                 quote = normalize(row)
-                # Stable even when rejected rows force us to preserve the source file.
+                identity = {key: quote[key] for key in ('speaker', 'text', 'character_id')}
+                content_key = json.dumps(identity, ensure_ascii=False, sort_keys=True)
+                ordinal = ordinals.get(content_key, 0) + 1
+                # Rejected rows must not affect legacy IDs. Count only valid
+                # records with identical normalized content, never absolute rows.
                 quote["id"] = quote["id"] or str(uuid.uuid5(uuid.NAMESPACE_URL,
-                    f"zft-quote:{number}:" + json.dumps(quote, ensure_ascii=False, sort_keys=True)))
+                    f"zft-quote:{ordinal}:" + content_key))
                 if quote["id"] in seen:
                     raise ValueError("duplicate ID")
                 seen.add(quote["id"])
+                ordinals[content_key] = ordinal
                 valid.append(quote)
             except ValueError as exc:
                 rejected.append({"row": number, "error": str(exc), "record": row})

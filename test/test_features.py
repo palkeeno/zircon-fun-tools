@@ -151,6 +151,21 @@ class QuoteCommandsTests(unittest.IsolatedAsyncioTestCase):
         self.cog._load_data()
         self.assertEqual(self.cog.quotes[0]['id'], identity)
 
+    async def test_removing_rejected_rows_does_not_change_legacy_identities(self):
+        path = Path(self.cog.data_path)
+        rows = [None, dict(speaker='A', text='same'), {'speaker': ''},
+                dict(speaker='B', text='other'), dict(speaker='A', text='same')]
+        path.write_text(json.dumps(rows))
+        self.cog._load_data()
+        identities = [q['id'] for q in self.cog.quotes]
+        self.assertEqual(len(set(identities)), 3)
+        repaired = [row for row in rows if isinstance(row, dict) and row.get('text')]
+        path.write_text(json.dumps(repaired))
+        self.cog._load_data()
+        self.assertEqual([q['id'] for q in self.cog.quotes], identities)
+        self.cog._load_data()
+        self.assertEqual([q['id'] for q in self.cog.quotes], identities)
+
     async def test_rejected_rows_block_crud_until_explicit_validated_replacement(self):
         path = Path(self.cog.data_path)
         path.write_text('[{"id":"valid","speaker":"A","text":"ok"},null]')
@@ -512,6 +527,25 @@ class PosterQueueTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CacheFeatureTests(unittest.TestCase):
+    def test_scraper_version_change_refreshes_persistent_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'source.png'
+            Image.new('RGB', (8, 8)).save(source)
+            with patch.object(config, '_DATA_DIR', directory), patch('setup_fonts.find_japanese_font', return_value=None), \
+                 patch.object(config.IMAGE_CACHE, 'get_sync', return_value=source), \
+                 patch.object(Poster, '_scrape_character_info', side_effect=[{'name': 'Old'}, {'name': 'New', 'goal': 'new field'}]) as scrape, \
+                 patch.object(Poster, '_draw_poster', side_effect=lambda char, mask, info: Image.new('RGB', (1600, 2100), 'red' if info['name'] == 'Old' else 'green')) as draw:
+                with patch('cogs.poster.SCRAPER_VERSION', 'old-scraper'):
+                    old = Poster(MagicMock())._render_poster('123')
+                with patch('cogs.poster.SCRAPER_VERSION', 'new-scraper'):
+                    updated = Poster(MagicMock())._render_poster('123')
+                    restarted = Poster(MagicMock())._render_poster('123')
+                self.assertEqual(scrape.call_count, 2)
+                self.assertEqual(draw.call_count, 2)
+                self.assertNotEqual(old, updated)
+                self.assertEqual(updated, restarted)
+
     def test_font_replacement_reloads_objects_and_stores_correct_new_png(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -559,7 +593,7 @@ class CacheFeatureTests(unittest.TestCase):
                 cog.assets_dir = assets
                 cog._cache.ttl = 60
                 cog._render_poster('123')
-                info_path = cog._cache.path('info', config.get_character_page_url('123'))
+                info_path = cog._cache.path('info', cog._info_cache_key('123'))
                 os.utime(info_path, (1000, 1000))
                 (assets / 'new.png').write_bytes(b'new asset')
                 # The new assets key creates a PNG just before the old metadata expires.
