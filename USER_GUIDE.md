@@ -21,16 +21,12 @@
 | コマンド | 説明 | 権限 |
 |---------|------|------|
 | `/birthday` | 誕生日一覧を表示・検索 | 全員 |
-| `/birthday_update` | 誕生日データを一括更新 | 管理者 |
-| `/birthday_toggle` | 誕生日自動投稿のON/OFF | 管理者 |
-| `/birthday_schedule` | 誕生日通知の時刻を設定 | 管理者 |
+| `/birthday_admin` | 誕生日の管理パネル・データ更新 | デフォルトは管理者 |
 | `/oracle` | 選択肢からランダムに占う | 全員 |
 | `/lottery` | ロールメンバーから抽選 | 全員※ |
 | `/poster` | キャラクターポスターを生成 | 全員 |
 | `/quote` | 名言一覧を表示・検索 | 全員 |
-| `/quote_update` | 名言データを一括更新 | 管理者 |
-| `/quote_toggle` | 名言定期投稿のON/OFF | 管理者 |
-| `/quote_schedule` | 名言定期投稿のスケジュール設定 | 管理者 |
+| `/quote_admin` | 名言の管理パネル・データ更新 | デフォルトは管理者 |
 
 ※ 権限はDiscordサーバーの設定で変更できます。
 
@@ -60,10 +56,10 @@ Zirconキャラクターの誕生日を管理し、自動でお祝いメッセ�
 
 ---
 
-### `/birthday_update` - 誕生日データの一括更新（管理者専用）
+### `/birthday_admin` - 誕生日データの一括更新（デフォルトは管理者）
 
 ```
-/birthday_update file:<CSV/JSONファイル>
+/birthday_admin file:<CSV/JSONファイル>
 ```
 
 **パラメータ:**
@@ -88,28 +84,15 @@ character_id,name,month,day
 
 ---
 
-### `/birthday_toggle` - 自動投稿のON/OFF（管理者専用）
+### 自動投稿・スケジュールの変更
 
-```
-/birthday_toggle enabled:<true|false>
-```
+`/birthday_admin` を引数なしで実行すると、現在の設定と登録件数を本人だけに表示します。
 
-**パラメータ:**
-- `enabled`: `true`で有効化、`false`で無効化
+- 「自動投稿をON/OFFにする」で切り替えます。
+- 「投稿スケジュール」で入力フォームを開きます。誕生日は投稿する時（0〜23）を指定します。時刻はBotの設定タイムゾーンで表示します。
+- データ更新は `/birthday_admin file:<CSV/JSONファイル>` で添付し、「データを更新」→「全置換を実行」で確定します。キャンセルや時間切れでは変更しません。
 
----
-
-### `/birthday_schedule` - 投稿時刻の設定（管理者専用）
-
-```
-/birthday_schedule hour:<時>
-```
-
-**パラメータ:**
-- `hour`: 投稿する時刻（0〜23、日本時間）
-
-**使用例:**
-- `/birthday_schedule hour:9` - 毎日9:00（JST）に投稿
+デフォルト権限は管理者です。必要に応じてDiscordのサーバー設定の連携サービスから権限を変更できます。操作パネルは3分、全置換の確認は1分で期限切れになります。再試行はコマンドを再実行してください。
 
 ---
 
@@ -222,10 +205,10 @@ character_id,name,month,day
 
 ---
 
-### `/quote_update` - 名言データの一括更新（管理者専用）
+### `/quote_admin` - 名言データの一括更新（デフォルトは管理者）
 
 ```
-/quote_update file:<CSV/JSONファイル>
+/quote_admin file:<CSV/JSONファイル>
 ```
 
 **パラメータ:**
@@ -248,31 +231,15 @@ speaker,text,character_id
 
 ---
 
-### `/quote_toggle` - 定期投稿のON/OFF（管理者専用）
+### 自動投稿・スケジュールの変更
 
-```
-/quote_toggle enabled:<true|false>
-```
+`/quote_admin` を引数なしで実行すると、現在の設定と登録件数を本人だけに表示します。
 
-**パラメータ:**
-- `enabled`: `true`で有効化、`false`で無効化
+- 「自動投稿をON/OFFにする」で切り替えます。
+- 「投稿スケジュール」で入力フォームを開きます。名言は日数（1以上）・時（0〜23）・分（0〜59）を指定します。時刻はBotの設定タイムゾーンで表示します。
+- データ更新は `/quote_admin file:<CSV/JSONファイル>` で添付し、「データを更新」→「全置換を実行」で確定します。キャンセルや時間切れでは変更しません。
 
----
-
-### `/quote_schedule` - 定期投稿スケジュールの設定（管理者専用）
-
-```
-/quote_schedule days:<日数> hour:<時> minute:<分>
-```
-
-**パラメータ:**
-- `days`: 投稿間隔（日数）
-- `hour`: 投稿時刻（時、0〜23）
-- `minute`: 投稿時刻（分、0〜59）
-
-**使用例:**
-- `/quote_schedule days:1 hour:9 minute:0` - 毎日9:00に投稿
-- `/quote_schedule days:3 hour:12 minute:30` - 3日ごとの12:30に投稿
+デフォルト権限は管理者です。必要に応じてDiscordのサーバー設定の連携サービスから権限を変更できます。操作パネルは3分、全置換の確認は1分で期限切れになります。再試行はコマンドを再実行してください。
 
 ---
 
@@ -313,7 +280,7 @@ speaker,text,character_id
 ### Q: 誕生日/名言の自動投稿が来ない
 
 **A:** 以下を確認してください：
-1. 自動投稿が有効になっているか（`/birthday_toggle enabled:true` または `/quote_toggle enabled:true`）
+1. 自動投稿が有効になっているか（`/birthday_admin` または `/quote_admin` の管理パネルでONにする）
 2. 投稿先チャンネルが正しく設定されているか（管理者に確認）
 3. Botがそのチャンネルへの投稿権限を持っているか
 
