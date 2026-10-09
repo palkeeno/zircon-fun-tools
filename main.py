@@ -32,6 +32,7 @@ class FunToolsBot(commands.Bot):
         intents.message_content = True
         intents.members = True
         super().__init__(command_prefix=commands.when_mentioned_or('!'), intents=intents)
+        self.tree.on_error = self.on_tree_error
         self.initial_extensions = [
             'cogs.birthday',
             'cogs.oracle',
@@ -77,6 +78,19 @@ class FunToolsBot(commands.Bot):
             logger.error(f'Error in setup_hook: {e}')
             logger.error(traceback.format_exc())
             raise
+
+    async def on_tree_error(self, interaction, error):
+        if isinstance(error, discord.app_commands.MissingPermissions):
+            message = "このコマンドはサーバー管理者のみ実行できます。"
+        elif isinstance(error, discord.app_commands.NoPrivateMessage):
+            message = "このコマンドはサーバー内で実行してください。"
+        else:
+            logger.error("スラッシュコマンドエラー", exc_info=error)
+            message = "処理中にエラーが発生しました。管理者にお問い合わせください。"
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
 
     async def on_ready(self):
         logger.info(f'Logged in as {self.user} (ID: {self.user.id})')

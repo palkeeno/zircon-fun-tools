@@ -15,9 +15,9 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 
 **利用可能なコマンド:**
 - `/birthday [id_or_name]` - 誕生日一覧を表示。引数（IDまたは名前）を指定すると検索。
-- `/birthday_update file:<CSV/JSON>` - ファイルをアップロードして誕生日データを一括更新（全置換）。**管理者のみ**
-- `/birthday_toggle enabled:<true|false>` - 誕生日自動投稿のON/OFF切替（管理者のみ）
-- `/birthday_schedule hour:<時>` - 誕生日自動投稿の時刻を設定（管理者のみ）
+- `/birthday_update file:<CSV/JSON>` - ファイルをアップロードして誕生日データを一括更新（全置換）。**初期設定は管理者限定**
+- `/birthday_toggle enabled:<true|false>` - 誕生日自動投稿のON/OFF切替（初期設定は管理者限定）
+- `/birthday_schedule hour:<時>` - 誕生日自動投稿の時刻を設定（初期設定は管理者限定）
 
 **自動通知:**
 - 毎日設定された時刻（デフォルト: 9:00 JST）に自動でお祝いメッセージを投稿
@@ -79,9 +79,9 @@ Discordサーバーで遊べる様々なゲームや娯楽機能を提供する�
 
 利用可能なコマンド:
 - `/quote [keyword]` – 名言一覧を表示。キーワードを指定すると検索。
-- `/quote_update file:<CSV/JSON>` – 名言データをファイルで一括更新（全置換）。**管理者のみ**
-- `/quote_toggle enabled:<true|false>` – 定期投稿のON/OFF切替（管理者のみ）
-- `/quote_schedule days:<日数> hour:<時> minute:<分>` – 定期投稿のスケジュールを設定（例: days=1, hour=9, minute=0 で毎日9:00）（管理者のみ）
+- `/quote_update file:<CSV/JSON>` – 名言データをファイルで一括更新（全置換）。**初期設定は管理者限定**
+- `/quote_toggle enabled:<true|false>` – 定期投稿のON/OFF切替（初期設定は管理者限定）
+- `/quote_schedule days:<日数> hour:<時> minute:<分>` – 定期投稿のスケジュールを設定（例: days=1, hour=9, minute=0 で毎日9:00）（初期設定は管理者限定）
 
 **名言IDの確認方法:**
 - `/quote` (or search) で一覧表示時に各名言のIDが表示されます
@@ -387,3 +387,6 @@ palkeeno
 テストは `python test/run_tests.py` で一時コピー上に隔離して実行してください。実際の設定・保存データは読み書きしません。
 
 誕生日・名言・設定は一時ファイルへの保存後に置換し、直前の1世代を `.bak` に保存します。保存失敗時は既存データを維持し、成功を返しません。設定ファイルが破損している場合も上書きせず停止します。復元する場合はBot停止中に `.bak` を確認し、対象JSONへコピーしてから再起動してください。
+
+管理コマンドはサーバー内限定で、`default_permissions(administrator=True)` により初期設定を管理者限定にします。利用できるロール・ユーザーはDiscordの「連携 > アプリ」から変更できます。Bot側で管理者権限を強制チェックしません。
+誕生日通知は送信成功時だけ通知済みとし、当日の指定時刻以降に失敗分を再試行します。既存の同じID・日付の重複は1回にまとめます。全置換は不正な日付・行・重複・検証後0件を拒否します。
