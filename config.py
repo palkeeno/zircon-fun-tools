@@ -6,6 +6,8 @@
 import os
 import json
 import logging
+import threading
+import utils
 from typing import Dict, Any, Optional
 from dotenv import dotenv_values
 
@@ -47,6 +49,7 @@ logger.info("起動環境: %s / 設定ファイル: %s", ENV, ENV_FILE)
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 _RUNTIME_CONFIG_PATH = os.path.join(_DATA_DIR, 'config.json')
+_RUNTIME_CONFIG_LOCK = threading.RLock()
 
 # =============================================================================
 # 外部URL設定（一元管理）
@@ -114,7 +117,7 @@ def _ensure_data_dir() -> None:
     os.makedirs(_DATA_DIR, exist_ok=True)
 
 
-def _load_runtime_config() -> Dict[str, Any]:
+def _load_runtime_config(*, strict=False) -> Dict[str, Any]:
     _ensure_data_dir()
     if not os.path.exists(_RUNTIME_CONFIG_PATH):
         return {}
@@ -123,20 +126,25 @@ def _load_runtime_config() -> Dict[str, Any]:
             payload = json.load(handle)
     except json.JSONDecodeError as exc:
         logger.warning("runtime config の読み込みに失敗しました: %s", exc)
+        if strict:
+            raise
         return {}
     except OSError as exc:
         logger.error("runtime config のアクセス時にエラーが発生しました: %s", exc)
+        if strict:
+            raise
         return {}
     if isinstance(payload, dict):
         return payload
+    if strict:
+        raise ValueError("runtime config の形式が不正です。既存ファイルを保持します")
     logger.warning("runtime config の形式が不正です。空の設定として扱います。")
     return {}
 
 
 def _save_runtime_config(data: Dict[str, Any]) -> None:
     _ensure_data_dir()
-    with open(_RUNTIME_CONFIG_PATH, "w", encoding="utf-8") as handle:
-        json.dump(data, handle, ensure_ascii=False, indent=2)
+    utils.atomic_write_json(_RUNTIME_CONFIG_PATH, data)
 
 
 def get_runtime_section(section: str) -> Dict[str, Any]:
@@ -150,9 +158,10 @@ def set_runtime_section(section: str, values: Dict[str, Any]) -> Dict[str, Any]:
     """設定ファイル (data/config.json) に指定セクションを書き込みます。"""
     if not isinstance(values, dict):
         raise ValueError("values must be a dict")
-    payload = _load_runtime_config()
-    payload[section] = dict(values)
-    _save_runtime_config(payload)
+    with _RUNTIME_CONFIG_LOCK:
+        payload = _load_runtime_config(strict=True)
+        payload[section] = dict(values)
+        _save_runtime_config(payload)
     return dict(values)
 
 

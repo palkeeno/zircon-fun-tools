@@ -102,3 +102,34 @@ def clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:
         int: 変換・制限された整数値
     """
     return coerce_int(value, fallback, minimum=minimum, maximum=maximum)
+
+
+def atomic_write_json(path, payload):
+    """直前のファイルを .bak に残し、保存完了後に置換する。"""
+    import json
+    import os
+    import tempfile
+    import shutil
+    directory = os.path.dirname(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".zft-", suffix=".json", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if os.path.isfile(path):
+            backup_fd, backup_temporary = tempfile.mkstemp(prefix=".zft-backup-", dir=directory)
+            try:
+                with os.fdopen(backup_fd, "wb") as backup, open(path, "rb") as original:
+                    shutil.copyfileobj(original, backup)
+                    backup.flush()
+                    os.fsync(backup.fileno())
+                os.replace(backup_temporary, str(path) + ".bak")
+            finally:
+                if os.path.exists(backup_temporary):
+                    os.remove(backup_temporary)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)

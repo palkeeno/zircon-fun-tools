@@ -60,3 +60,5 @@ data/assets/*.jpeg
 
 # Generated poster output
 poster_output.png
+# Previous successful JSON saves
+data/*.json.bak
