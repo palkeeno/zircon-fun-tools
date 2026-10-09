@@ -512,6 +512,38 @@ class PosterQueueTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CacheFeatureTests(unittest.TestCase):
+    def test_font_replacement_reloads_objects_and_stores_correct_new_png(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            font = root / 'prepared.ttf'
+            font.write_bytes(b'old font')
+            source = root / 'source.png'
+            Image.new('RGB', (8, 8)).save(source)
+            old_font, new_font = object(), object()
+            with patch.object(config, '_DATA_DIR', directory), patch('setup_fonts.find_japanese_font', return_value=str(font)), \
+                 patch.object(config.IMAGE_CACHE, 'get_sync', return_value=source), \
+                 patch.object(Poster, '_scrape_character_info', return_value={'name': 'A'}), \
+                 patch('cogs.poster.ImageFont.truetype', side_effect=[old_font, new_font]) as loader:
+                cog = Poster(MagicMock())
+                self.assertIs(cog._try_load_font(config.POSTER_FONT_A, 24), old_font)
+                self.assertIs(cog._try_load_font(config.POSTER_FONT_A, 24), old_font)
+                loader.assert_called_once()
+                def draw(char, mask, info):
+                    current = cog._try_load_font(config.POSTER_FONT_A, 24)
+                    return Image.new('RGB', (1600, 2100), 'red' if current is old_font else 'green')
+                with patch.object(cog, '_draw_poster', side_effect=draw) as painter:
+                    original = cog._render_poster('123')
+                    font.write_bytes(b'new replacement font')
+                    fresh = cog._render_poster('123')
+                    self.assertEqual(loader.call_count, 2)
+                    self.assertEqual(painter.call_count, 2)
+                    self.assertNotEqual(original, fresh)
+                    self.assertIs(cog._try_load_font(config.POSTER_FONT_A, 24), new_font)
+                    restarted = Poster(MagicMock())
+                    self.assertEqual(restarted._render_poster('123'), fresh)
+                with Image.open(io.BytesIO(fresh)) as image:
+                    self.assertEqual(image.getpixel((0, 0)), (0, 128, 0))
+
     def test_expired_metadata_refreshes_before_reusing_newer_completed_png(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -76,11 +76,17 @@ class Poster(commands.Cog):
             for item in missing:
                 logger.info(f"  - {item}")
             logger.info("必要に応じて data/assets/ ディレクトリに画像ファイルを配置してください。")
-    @lru_cache(maxsize=128)
     def _try_load_font(self, prefer_path: str, size: int):
         path = setup_fonts.find_japanese_font(prefer_path)
         if not path:
             raise ValueError("日本語フォントがありません。事前にpython setup_fonts.py --prepareを実行してください")
+        signature = Path(path).stat()
+        return self._load_font(path, size, signature.st_mtime_ns, signature.st_size)
+
+    @lru_cache(maxsize=128)
+    def _load_font(self, path, size, mtime_ns, file_size):
+        # Match the signature included in completed-poster keys. Replacing the
+        # same path must load a new FreeTypeFont instead of caching stale glyphs.
         return ImageFont.truetype(path, size)
 
     def _draw_text_with_glow(self, draw: ImageDraw.Draw, text: str, x: int, y: int, 
