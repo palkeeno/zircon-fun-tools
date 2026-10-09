@@ -14,7 +14,7 @@ import os
 import config
 import utils
 from cogs.admin_panel import AdminPanel
-from cogs.backups import save_snapshot
+from cogs.backups import persist_with_snapshot
 
 import csv
 import io
@@ -144,10 +144,12 @@ class Birthday(commands.Cog):
 
     async def _change_settings(self, values: Dict[str, Any], *, backup: bool = True) -> None:
         async with self._data_lock:
-            if backup:
-                await asyncio.to_thread(save_snapshot, self, "birthday", "settings")
             updated = {**self.settings, **values}
-            await asyncio.to_thread(config.set_runtime_section, "birthday", updated)
+            if backup:
+                await asyncio.to_thread(persist_with_snapshot, self, "birthday", "settings",
+                                        lambda: config.set_runtime_section("birthday", updated))
+            else:
+                await asyncio.to_thread(config.set_runtime_section, "birthday", updated)
             self.settings = updated
 
     def _refresh_daily_flags(self, now: datetime.datetime) -> None:
@@ -472,11 +474,11 @@ class Birthday(commands.Cog):
                 await interaction.followup.send(f"不正なデータが{invalid_count}件あるため更新しません。ファイルを修正してください。", ephemeral=True)
                 return
             async with self._data_lock:
-                await asyncio.to_thread(save_snapshot, self, "birthday", "data")
                 previous = self.birthdays
                 self.birthdays = validated
                 try:
-                    await asyncio.to_thread(self.save_birthdays)
+                    await asyncio.to_thread(persist_with_snapshot, self, "birthday", "data",
+                                            self.save_birthdays, previous)
                 except Exception:
                     self.birthdays = previous
                     raise

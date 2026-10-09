@@ -20,7 +20,7 @@ from discord.ext import commands, tasks
 import config
 import utils
 from cogs.admin_panel import AdminPanel
-from cogs.backups import save_snapshot
+from cogs.backups import persist_with_snapshot
 
 logger = logging.getLogger(__name__)
 # 環境に依存しないパス構築
@@ -94,10 +94,12 @@ class Quotes(commands.Cog):
 
     async def _change_settings(self, values: Dict[str, Any], *, backup: bool = True) -> None:
         async with self._data_lock:
-            if backup:
-                await asyncio.to_thread(save_snapshot, self, "quote", "settings")
             updated = {**self.settings, **values}
-            await asyncio.to_thread(config.set_runtime_section, "quotes", updated)
+            if backup:
+                await asyncio.to_thread(persist_with_snapshot, self, "quote", "settings",
+                                        lambda: config.set_runtime_section("quotes", updated))
+            else:
+                await asyncio.to_thread(config.set_runtime_section, "quotes", updated)
             self.settings = updated
 
     def _ensure_data_dir(self) -> None:
@@ -422,11 +424,11 @@ class Quotes(commands.Cog):
                 return
 
             async with self._data_lock:
-                await asyncio.to_thread(save_snapshot, self, "quote", "data")
                 previous = self.quotes
                 self.quotes = new_quotes
                 try:
-                    await asyncio.to_thread(self._save_data)
+                    await asyncio.to_thread(persist_with_snapshot, self, "quote", "data",
+                                            self._save_data, previous)
                 except Exception:
                     self.quotes = previous
                     raise

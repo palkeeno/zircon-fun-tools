@@ -5,7 +5,7 @@ import asyncio
 import io
 import json
 
-from cogs.backups import payload, snapshot_path, restore_snapshot
+from cogs.backups import payload, snapshot_path, restore_snapshot, SnapshotChangedError
 
 import discord
 
@@ -108,13 +108,17 @@ class AdminPanel(discord.ui.View):
         await self.download(interaction, "settings")
 
     async def ask_restore(self, interaction, kind):
-        if not snapshot_path(self.cog, self.feature, kind).is_file():
-            await interaction.response.send_message("復元できるバックアップがありません。次回の管理操作から自動保存されます。", ephemeral=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            async with self.cog._data_lock:
+                expected = await asyncio.to_thread(snapshot_path(self.cog, self.feature, kind).read_bytes)
+        except FileNotFoundError:
+            await interaction.followup.send("復元できるバックアップがありません。次回の管理操作から自動保存されます。", ephemeral=True)
             return
         label = "データ更新" if kind == "data" else "設定変更"
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"直前の{label}前の状態に戻します。復元しますか？",
-            view=RestoreConfirmation(self, kind), ephemeral=True,
+            view=RestoreConfirmation(self, kind, expected), ephemeral=True,
         )
 
     @discord.ui.button(label="データを復元", style=discord.ButtonStyle.danger, row=2)
@@ -127,10 +131,11 @@ class AdminPanel(discord.ui.View):
 
 
 class RestoreConfirmation(discord.ui.View):
-    def __init__(self, panel, kind):
+    def __init__(self, panel, kind, expected=None):
         super().__init__(timeout=60)
         self.panel = panel
         self.kind = kind
+        self.expected = expected
         self.used = False
 
     async def interaction_check(self, interaction):
@@ -150,7 +155,11 @@ class RestoreConfirmation(discord.ui.View):
         self.stop()
         try:
             await interaction.response.defer(ephemeral=True)
-            await restore_snapshot(self.panel.cog, self.panel.feature, self.kind)
+            try:
+                await restore_snapshot(self.panel.cog, self.panel.feature, self.kind, self.expected)
+            except SnapshotChangedError:
+                await interaction.edit_original_response(content="別の管理操作でバックアップが変わりました。管理パネルから復元を選び直してください。", view=None)
+                return
             await interaction.edit_original_response(content="更新前の状態へ復元しました。管理パネルを開き直すと最新の状態を確認できます。", view=None)
         finally:
             self.panel.busy = False
