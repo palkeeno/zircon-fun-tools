@@ -20,6 +20,7 @@ from discord.ext import commands, tasks
 import config
 import utils
 from cogs.admin_panel import AdminPanel
+from cogs.backups import save_snapshot
 
 logger = logging.getLogger(__name__)
 # 環境に依存しないパス構築
@@ -91,8 +92,10 @@ class Quotes(commands.Cog):
         payload = values if values is not None else self.settings
         config.set_runtime_section("quotes", payload)
 
-    async def _change_settings(self, values: Dict[str, Any]) -> None:
+    async def _change_settings(self, values: Dict[str, Any], *, backup: bool = True) -> None:
         async with self._data_lock:
+            if backup:
+                await asyncio.to_thread(save_snapshot, self, "quote", "settings")
             updated = {**self.settings, **values}
             await asyncio.to_thread(config.set_runtime_section, "quotes", updated)
             self.settings = updated
@@ -419,6 +422,7 @@ class Quotes(commands.Cog):
                 return
 
             async with self._data_lock:
+                await asyncio.to_thread(save_snapshot, self, "quote", "data")
                 previous = self.quotes
                 self.quotes = new_quotes
                 try:
