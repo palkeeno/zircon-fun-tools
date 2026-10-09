@@ -54,6 +54,10 @@ if [[ "$1" == install ]]; then cp "$4" rendered.service; else echo "$*" >> calls
             self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
             unit = (root / 'rendered.service').read_text()
             self.assertNotIn('@PROJECT_DIR@', unit)
+            self.assertNotIn('@WORKING_DIRECTORY@', unit)
+            working_directory = next(line.split('=', 1)[1] for line in unit.splitlines() if line.startswith('WorkingDirectory='))
+            self.assertFalse(working_directory.startswith('"'))
+            self.assertFalse(working_directory.endswith('"'))
             self.assertIn('User=1000', unit)
             self.assertIn('bot space%%name', unit)
             self.assertIn('Restart=on-failure', unit)
@@ -61,6 +65,14 @@ if [[ "$1" == install ]]; then cp "$4" rendered.service; else echo "$*" >> calls
             self.assertIn('systemctl enable zircon-bot.service', (root / 'calls.log').read_text())
             self.assertIn('systemctl restart zircon-bot.service', (root / 'calls.log').read_text())
             self.assertIn(b'fonts prepared', result.stdout)
+            # Linux CI validates the actual rendered unit using systemd's parser,
+            # rather than assuming valid quoting from substring assertions.
+            if sys.platform == 'linux':
+                verifier = shutil.which('systemd-analyze')
+                self.assertIsNotNone(verifier, 'Linux tests require systemd-analyze')
+                result = subprocess.run([verifier, 'verify', str(root / 'rendered.service')],
+                                        capture_output=True, timeout=15)
+                self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
             # Reinstallation must explicitly restart an already running service.
             result = subprocess.run(command, cwd=root, env=environment, capture_output=True, timeout=15)
             self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))

@@ -8,7 +8,7 @@ StartLimitBurst=5
 [Service]
 Type=simple
 User=@SERVICE_USER@
-WorkingDirectory="@PROJECT_DIR@"
+WorkingDirectory=@WORKING_DIRECTORY@
 Environment="ZFT_ENV=production"
 Environment="PYTHONUNBUFFERED=1"
 ExecStart="@PROJECT_DIR@/.venv/bin/python" "@PROJECT_DIR@/main.py"

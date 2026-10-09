@@ -48,3 +48,5 @@ Each path has an executable regression test in test_features.py.
 - Explicitly restart the service after reinstalling its unit; the fake-command installer test covers repeated installation.
 
 - Route default image assets and dynamic country flags through the isolated data directory, so direct unittest execution cannot read the original checkout assets.
+
+- Render WorkingDirectory as an unquoted literal absolute path, escaping unit specifiers separately from ExecStart arguments. Linux CI now validates the rendered service with systemd-analyze verify.

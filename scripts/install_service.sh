@@ -20,10 +20,16 @@ SERVICE_UID="$(id -u "$SERVICE_USER")"
 "$PROJECT_DIR/.venv/bin/python" - "$SCRIPT_DIR/zircon-bot.service" "$PROJECT_DIR" "$SERVICE_UID" "$UNIT_TEMP" <<'PY'
 import pathlib, sys
 template, project, user, output = sys.argv[1:]
-project = project.replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%')
 if '\n' in project or '\r' in project:
     raise ValueError('Unsupported project path')
-unit = pathlib.Path(template).read_text().replace('@PROJECT_DIR@', project).replace('@SERVICE_USER@', user)
+# WorkingDirectory is a literal path, not a shell-quoted argument list. Interior
+# spaces are preserved; only unit specifier '%' needs doubling here.
+working_directory = project.replace('%', '%%')
+executable_directory = project.replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%')
+unit = (pathlib.Path(template).read_text()
+        .replace('@WORKING_DIRECTORY@', working_directory)
+        .replace('@PROJECT_DIR@', executable_directory)
+        .replace('@SERVICE_USER@', user))
 pathlib.Path(output).write_text(unit)
 PY
 sudo install -m 644 "$UNIT_TEMP" /etc/systemd/system/zircon-bot.service
