@@ -694,6 +694,12 @@ class HelpAndErrorTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(chmod.call_args.args[1], 0o644)
                 if os.name == 'posix':
                     self.assertEqual(stat.S_IMODE(prepared.stat().st_mode), 0o644)
+                    # An already-readable font may be owned by a different user.
+                    # Preparation must not require a needless chmod in that case.
+                    with patch('setup_fonts.find_japanese_font', return_value=str(prepared)), \
+                         patch('setup_fonts.os.chmod', side_effect=PermissionError('not owner')) as forbidden:
+                        self.assertEqual(setup_fonts.prepare_japanese_font(), str(prepared))
+                    forbidden.assert_not_called()
                 real_chmod(prepared, 0o600)
                 with patch('setup_fonts.find_japanese_font', return_value=str(prepared)):
                     self.assertEqual(setup_fonts.prepare_japanese_font(), str(prepared))

@@ -53,7 +53,8 @@ def prepare_japanese_font():
     if prepared:
         # Repair permissions of fonts cached by older preparations, but never
         # change the ownership or permissions of system/custom font files.
-        if not destination.is_symlink() and Path(prepared).resolve() == destination.resolve():
+        if (not destination.is_symlink() and Path(prepared).resolve() == destination.resolve()
+                and os.stat(prepared).st_mode & 0o777 != 0o644):
             os.chmod(prepared, 0o644)
         return prepared
     from image_cache import download_bytes
