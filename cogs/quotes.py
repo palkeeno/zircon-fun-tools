@@ -88,10 +88,13 @@ class Quotes(commands.Cog):
 
     def _persist_settings(self, values: Optional[Dict[str, Any]] = None) -> None:
         payload = values if values is not None else self.settings
-        try:
-            config.set_runtime_section("quotes", payload)
-        except Exception as exc:
-            logger.error("名言設定の保存に失敗しました: %s", exc, exc_info=True)
+        config.set_runtime_section("quotes", payload)
+
+    async def _change_settings(self, values: Dict[str, Any]) -> None:
+        async with self._data_lock:
+            updated = {**self.settings, **values}
+            await asyncio.to_thread(config.set_runtime_section, "quotes", updated)
+            self.settings = updated
 
     def _ensure_data_dir(self) -> None:
         os.makedirs(os.path.dirname(self.data_path) or ".", exist_ok=True)
@@ -142,8 +145,7 @@ class Quotes(commands.Cog):
         payload = {
             "quotes": self.quotes,
         }
-        with open(self.data_path, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, ensure_ascii=False, indent=2)
+        utils.atomic_write_json(self.data_path, payload)
 
     def _parse_datetime(self, value: Optional[str]) -> Optional[datetime.datetime]:
         if not value:
@@ -248,7 +250,7 @@ class Quotes(commands.Cog):
         async with self._data_lock:
             self.settings["last_posted_at"] = _now(self.tz).isoformat()
             self.settings["last_posted_quote_id"] = quote.get("id")
-            self._persist_settings()
+            await asyncio.to_thread(self._persist_settings)
 
     @tasks.loop(minutes=1)
     async def quote_posting_loop(self) -> None:
@@ -418,8 +420,13 @@ class Quotes(commands.Cog):
                 return
 
             async with self._data_lock:
+                previous = self.quotes
                 self.quotes = new_quotes
-                self._save_data()
+                try:
+                    await asyncio.to_thread(self._save_data)
+                except Exception:
+                    self.quotes = previous
+                    raise
 
             await interaction.followup.send(f"名言データを全置換しました ({len(new_quotes)}件)。", ephemeral=True)
 
@@ -430,9 +437,7 @@ class Quotes(commands.Cog):
     @app_commands.command(name="quote_toggle", description="名言の定期投稿をON/OFFします")
     @app_commands.describe(enabled="true で有効化、false で無効化")
     async def quote_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
-        async with self._data_lock:
-            self.settings["enabled"] = bool(enabled)
-            self._persist_settings()
+        await self._change_settings({"enabled": bool(enabled)})
         state = "有効" if enabled else "無効"
         await interaction.response.send_message(f"名言の定期投稿を{state}にしました。", ephemeral=True)
 
@@ -449,12 +454,7 @@ class Quotes(commands.Cog):
             await interaction.response.send_message("入力値が不正です。日数は1以上、時刻は0-23/0-59で指定してください。", ephemeral=True)
             return
 
-        async with self._data_lock:
-            self.settings["days"] = days
-            self.settings["hour"] = hour
-            self.settings["minute"] = minute
-            self.settings["last_posted_at"] = None
-            self._persist_settings()
+        await self._change_settings({"days": days, "hour": hour, "minute": minute, "last_posted_at": None})
 
         await interaction.response.send_message(
             f"投稿スケジュールを {days}日おき {hour:02d}:{minute:02d} に設定しました。", ephemeral=True

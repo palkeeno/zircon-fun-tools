@@ -141,10 +141,13 @@ class Birthday(commands.Cog):
         self._persist_settings()
 
     def _persist_settings(self) -> None:
-        try:
-            config.set_runtime_section("birthday", self.settings)
-        except Exception as exc:
-            logger.error("誕生日設定の保存に失敗しました: %s", exc, exc_info=True)
+        config.set_runtime_section("birthday", self.settings)
+
+    async def _change_settings(self, values: Dict[str, Any]) -> None:
+        async with self._data_lock:
+            updated = {**self.settings, **values}
+            await asyncio.to_thread(config.set_runtime_section, "birthday", updated)
+            self.settings = updated
 
     def _refresh_daily_flags(self, now: datetime.datetime) -> None:
         today_str = now.date().isoformat()
@@ -176,7 +179,8 @@ class Birthday(commands.Cog):
         """スケジュールされた時刻に誕生日をチェックして通知するタスク"""
         try:
             now = datetime.datetime.now(self.tz)
-            self._refresh_daily_flags(now)
+            async with self._data_lock:
+                await asyncio.to_thread(self._refresh_daily_flags, now)
 
             if not self.settings.get("enabled", True):
                 return
@@ -190,8 +194,7 @@ class Birthday(commands.Cog):
 
             announced = await self._announce_today_birthdays(now)
             if announced:
-                self.settings["last_announced_date"] = today_str
-                self._persist_settings()
+                await self._change_settings({"last_announced_date": today_str})
         except Exception as e:
             logger.error(f"Error in birthday_task: {e}")
             logger.error(traceback.format_exc())
@@ -313,8 +316,7 @@ class Birthday(commands.Cog):
         os.makedirs(data_dir, exist_ok=True)
         try:
             if not os.path.exists(birthdays_path):
-                with open(birthdays_path, "w", encoding="utf-8") as f:
-                    json.dump([], f, ensure_ascii=False, indent=2)
+                utils.atomic_write_json(birthdays_path, [])
             with open(birthdays_path, "r", encoding="utf-8") as f:
                 self.birthdays = json.load(f)
                 if not isinstance(self.birthdays, list):
@@ -326,26 +328,21 @@ class Birthday(commands.Cog):
 
     def save_birthdays(self):
         """誕生日データを保存します（リスト形式）。dataフォルダがなければ作成。
-        
+
         Note: 非同期コンテキストから呼び出す場合はsave_birthdays_async()を使用してください。
         """
         # 環境に依存しないパス構築
         data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
         data_dir = os.path.abspath(data_dir)
         birthdays_path = os.path.join(data_dir, 'birthdays.json')
-        
+
         os.makedirs(data_dir, exist_ok=True)
-        try:
-            with open(birthdays_path, "w", encoding="utf-8") as f:
-                json.dump(self.birthdays, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving birthdays: {e}")
-            logger.error(traceback.format_exc())
+        utils.atomic_write_json(birthdays_path, self.birthdays)
 
     async def save_birthdays_async(self):
         """誕生日データを非同期で保存します（ロック付き）。"""
         async with self._data_lock:
-            self.save_birthdays()
+            await asyncio.to_thread(self.save_birthdays)
 
     @app_commands.command(name="birthday", description="誕生日の確認（一覧表示または検索）")
     @app_commands.describe(id_or_name="検索したいキャラクターIDまたは名前（指定しない場合は一覧表示）")
@@ -523,8 +520,13 @@ class Birthday(commands.Cog):
                     continue
             
             async with self._data_lock:
+                previous = self.birthdays
                 self.birthdays = validated
-                self.save_birthdays()
+                try:
+                    await asyncio.to_thread(self.save_birthdays)
+                except Exception:
+                    self.birthdays = previous
+                    raise
             
             await interaction.followup.send(f"誕生日データを全置換しました。({len(self.birthdays)} 件)", ephemeral=True)
 
@@ -540,11 +542,10 @@ class Birthday(commands.Cog):
     async def birthday_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
         """誕生日の自動投稿機能を切り替えるコマンド."""
 
-        self.settings["enabled"] = bool(enabled)
+        updated = {"enabled": bool(enabled)}
         if enabled:
-            # 再有効化と同時に当日の投稿状況をリセット
-            self.settings["last_announced_date"] = None
-        self._persist_settings()
+            updated["last_announced_date"] = None
+        await self._change_settings(updated)
         status = "有効" if enabled else "無効"
         await interaction.response.send_message(
             f"誕生日の自動投稿を{status}にしました。",
@@ -566,8 +567,7 @@ class Birthday(commands.Cog):
             )
             return
 
-        self.settings["hour"] = hour
-        self._persist_settings()
+        await self._change_settings({"hour": hour})
         await interaction.response.send_message(
             f"誕生日の自動投稿時刻を {hour:02d}:00 に設定しました。",
             ephemeral=True,
