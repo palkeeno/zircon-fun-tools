@@ -532,11 +532,25 @@ class Birthday(commands.Cog):
 
     async def _replace_birthdays(self, records):
         validated = [normalize(record) for record in records]
-        keys = [b["character_id"] for b in validated]
-        if len(keys) != len(set(keys)):
-            raise ValueError("同じキャラクターIDが既に登録されています")
+        # A mutation must not introduce duplicates, but preserved legacy groups
+        # elsewhere in the list must not prevent management of another character.
+        prior_counts, prior_dates = {}, {}
+        for record in self.birthdays:
+            cid = record['character_id']
+            prior_counts[cid] = prior_counts.get(cid, 0) + 1
+            prior_dates.setdefault(cid, set()).add((record['month'], record['day']))
+        grouped = {}
+        for record in validated:
+            grouped.setdefault(record['character_id'], []).append(record)
+        canonical = []
+        for cid, group in grouped.items():
+            dates = {(b['month'], b['day']) for b in group}
+            if len(group) > 1 and (len(dates) != 1 or dates != prior_dates.get(cid)
+                                  or len(group) > prior_counts.get(cid, 0)):
+                raise ValueError("同じキャラクターIDが既に登録されています")
+            canonical.append({**group[0], 'reported': any(b['reported'] for b in group)})
         previous = self.birthdays
-        self.birthdays = validated
+        self.birthdays = canonical
         try:
             await asyncio.to_thread(self.save_birthdays)
         except BaseException:
@@ -550,6 +564,8 @@ class Birthday(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         async with self._data_lock:
             record = normalize(dict(character_id=character_id, name=name, month=month, day=day, reported=False))
+            if any(b['character_id'] == record['character_id'] for b in self.birthdays):
+                raise ValueError("同じキャラクターIDが既に登録されています")
             await self._replace_birthdays([*self.birthdays, record])
         await interaction.followup.send("誕生日を追加しました。", ephemeral=True)
 
@@ -568,6 +584,8 @@ class Birthday(commands.Cog):
             record = normalize({**original, **changes})
             if (record['month'], record['day']) != (original['month'], original['day']):
                 record['reported'] = False
+            else:
+                record['reported'] = any(b.get('reported', False) for b in matches)
             # Old same-day duplicates describe one character, so edit them as one record.
             await self._replace_birthdays([b for b in self.birthdays if b not in matches] + [record])
         await interaction.followup.send("誕生日を編集しました。", ephemeral=True)

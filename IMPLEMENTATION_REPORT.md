@@ -26,7 +26,7 @@ Base: latest `origin/main` at `435a375` (including the target-guild synchronizat
 
 ## Verification
 
-- Windows / Python 3.11: 104 tests pass through `python test/run_tests.py`.
+- Windows / Python 3.11: 105 tests pass through `python test/run_tests.py`.
 - Direct `python -m unittest discover test`: same suite, disposable configuration and data.
 - Bash syntax checks for scripts; installer exercised with fake sudo/systemctl/crontab, including a path containing spaces and `%` and a legacy-PID refusal.
 - CI: Windows/Ubuntu and Python 3.10/3.12 (results must be checked on the PR head).
@@ -50,3 +50,5 @@ Each path has an executable regression test in test_features.py.
 - Route default image assets and dynamic country flags through the isolated data directory, so direct unittest execution cannot read the original checkout assets.
 
 - Render WorkingDirectory as an unquoted literal absolute path, escaping unit specifiers separately from ExecStart arguments. Linux CI now validates the rendered service with systemd-analyze verify.
+
+- Permit birthday CRUD when multiple legacy duplicate groups exist: normalize preserved same-date groups on mutation, retain any successful notification flag, and still reject newly introduced duplicates. Original rows are kept in the atomic-write backup.

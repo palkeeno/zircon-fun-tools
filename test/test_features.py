@@ -192,6 +192,34 @@ class QuoteCommandsTests(unittest.IsolatedAsyncioTestCase):
 
 
 class BirthdayFeatureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_crud_with_multiple_preserved_legacy_duplicate_groups(self):
+        for operation in ('add', 'edit', 'delete'):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'birthdays.json'
+                cog = Birthday(MagicMock(), str(path))
+                rows = [dict(character_id=cid, name=cid, month=10, day=9, reported=reported)
+                        for cid in ('A', 'B') for reported in (False, True)]
+                path.write_text(json.dumps(rows))
+                cog.load_birthdays()
+                self.assertEqual(len(cog.birthdays), 4)
+                item = interaction()
+                if operation == 'add':
+                    await Birthday.birthday_add.callback(cog, item, 'C', 'New', 10, 10)
+                    self.assertEqual(len(cog.birthdays), 3)
+                elif operation == 'edit':
+                    await Birthday.birthday_edit.callback(cog, item, 'A', name='Edited')
+                    self.assertEqual(len(cog.birthdays), 2)
+                    self.assertTrue(next(b for b in cog.birthdays if b['character_id'] == 'A')['reported'])
+                else:
+                    await Birthday.birthday_delete.callback(cog, item, 'A', confirm=True)
+                    self.assertEqual(len(cog.birthdays), 1)
+                retained = next(b for b in cog.birthdays if b['character_id'] == 'B')
+                self.assertTrue(retained['reported'])
+                self.assertEqual(len({b['character_id'] for b in cog.birthdays}), len(cog.birthdays))
+                self.assertEqual(json.loads(Path(str(path) + '.bak').read_text()), rows)
+                with self.assertRaises(ValueError):
+                    await Birthday.birthday_add.callback(cog, item, 'B', 'Duplicate', 10, 9)
+
     async def test_read_rejects_conflicting_dates_but_keeps_legacy_same_day_duplicates(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'birthdays.json'
