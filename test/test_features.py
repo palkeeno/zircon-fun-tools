@@ -3,6 +3,7 @@ import asyncio
 import datetime
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -483,6 +484,37 @@ class PosterQueueTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CacheFeatureTests(unittest.TestCase):
+    def test_expired_metadata_refreshes_before_reusing_newer_completed_png(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            assets = root / 'assets'
+            assets.mkdir()
+            source = root / 'source.png'
+            Image.new('RGB', (8, 8)).save(source)
+            with patch.object(config, '_DATA_DIR', directory), patch('setup_fonts.find_japanese_font', return_value=None), \
+                 patch.object(config.IMAGE_CACHE, 'get_sync', return_value=source), \
+                 patch.object(Poster, '_scrape_character_info', side_effect=[{'name': 'Old'}, {'name': 'New'}]) as scrape, \
+                 patch.object(Poster, '_draw_poster', side_effect=lambda char, mask, info: Image.new('RGB', (1600, 2100), 'red' if info['name'] == 'Old' else 'green')) as draw:
+                cog = Poster(MagicMock())
+                cog.assets_dir = assets
+                cog._cache.ttl = 60
+                cog._render_poster('123')
+                info_path = cog._cache.path('info', config.get_character_page_url('123'))
+                os.utime(info_path, (1000, 1000))
+                (assets / 'new.png').write_bytes(b'new asset')
+                # The new assets key creates a PNG just before the old metadata expires.
+                with patch('poster_cache.time.time', return_value=1059):
+                    old_png = cog._render_poster('123')
+                for png in cog._cache.directory.glob('*.png'):
+                    os.utime(png, (1059, 1059))
+                with patch('poster_cache.time.time', return_value=1061):
+                    fresh_png = cog._render_poster('123')
+                self.assertEqual(scrape.call_count, 2)
+                self.assertEqual(draw.call_count, 3)
+                self.assertNotEqual(old_png, fresh_png)
+                with Image.open(io.BytesIO(fresh_png)) as image:
+                    self.assertEqual(image.getpixel((0, 0)), (0, 128, 0))
+
     def test_dynamic_country_flags_add_replace_remove_invalidate_png(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

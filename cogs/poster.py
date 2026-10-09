@@ -17,6 +17,7 @@ import platform
 import math
 import asyncio
 import hashlib
+import json
 from pathlib import Path
 from functools import lru_cache
 from poster_cache import PosterCache
@@ -616,9 +617,6 @@ class Poster(commands.Cog):
     def _render_poster(self, character_id: str) -> bytes:
         key = self._cache_key(character_id)
         with self._render_locks[int(key[:8], 16) % len(self._render_locks)]:
-            content = self._cache.get("poster", key)
-            if content is not None:
-                return content
             info_key = config.get_character_page_url(character_id)
             info = self._cache.get("info", info_key)
             if info is None:
@@ -626,6 +624,13 @@ class Poster(commands.Cog):
                 if not info.get("name"):
                     raise ValueError("キャラクター名を取得できませんでした")
                 self._cache.put("info", info_key, info)
+            # A PNG is reusable only after its source metadata has passed the TTL
+            # check. Content in the key also invalidates it when a refresh changes
+            # character fields, even if the PNG's own lifetime has not elapsed.
+            key = hashlib.sha256((key + json.dumps(info, ensure_ascii=False, sort_keys=True)).encode()).hexdigest()
+            content = self._cache.get("poster", key)
+            if content is not None:
+                return content
             path = config.IMAGE_CACHE.get_sync(config.get_character_image_url(character_id))
             with ExitStack() as stack:
                 source = stack.enter_context(Image.open(path))
