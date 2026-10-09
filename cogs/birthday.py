@@ -11,9 +11,6 @@ import logging
 import traceback
 import datetime
 import os
-import tempfile
-import urllib.request
-from PIL import Image
 import config
 import utils
 
@@ -247,71 +244,29 @@ class Birthday(commands.Cog):
 
         return announced_any and all(b.get("reported", False) for b in today_birthdays)
 
-    async def _announce_zircon_birthday(self, channel, birthday_data):
-        """Zirconキャラクターの誕生日を発表"""
-        character_id = birthday_data.get("character_id", "")
-        name = birthday_data.get("name", "不明")
-        month = birthday_data.get("month")
-        day = birthday_data.get("day")
-        
-        # tempfileを使用して安全な一時ファイル管理
-        temp_webp_path = None
-        temp_png_path = None
-        
+    async def _announce_zircon_birthday(self, channel, birthday_data) -> bool:
+        """キャッシュ画像を添付し、Discord送信成功時だけ True を返す。"""
+        character_id = str(birthday_data.get("character_id", ""))
         try:
-            # 画像URLを取得（config.pyで一元管理）
-            url = config.get_character_image_url(character_id)
-            is_webp = url.endswith('.webp')
-            
-            # 画像取得
-            if is_webp:
-                # webp形式
-                # 一時ファイル作成（自動削除は無効化、手動で削除）
-                fd, temp_webp_path = tempfile.mkstemp(suffix='.webp', prefix=f'birthday_{character_id}_')
-                os.close(fd)  # ファイルディスクリプタを閉じる
-                urllib.request.urlretrieve(url, temp_webp_path)
-                img = Image.open(temp_webp_path)
-                img = img.convert('RGB')
-                
-                fd, temp_png_path = tempfile.mkstemp(suffix='.png', prefix=f'birthday_{character_id}_')
-                os.close(fd)
-                img.save(temp_png_path, 'PNG')
-                img.close()
-            else:
-                # png形式
-                fd, temp_png_path = tempfile.mkstemp(suffix='.png', prefix=f'birthday_{character_id}_')
-                os.close(fd)
-                urllib.request.urlretrieve(url, temp_png_path)
-            
-            # Embed作成
+            path = await config.IMAGE_CACHE.get(config.get_character_image_url(character_id))
             embed = discord.Embed(
                 title="🎉 誕生日おめでとう！ 🎉",
-                description=f"**{name}** の誕生日です！",
-                color=discord.Color.blue()
+                description=f"**{birthday_data.get('name', '不明')}** の誕生日です！",
+                color=discord.Color.blue(),
             )
-            embed.add_field(name="誕生日", value=f"{month}月{day}日", inline=False)
+            embed.add_field(name="誕生日", value=f"{birthday_data.get('month')}月{birthday_data.get('day')}日", inline=False)
             embed.add_field(name="キャラクター番号", value=character_id, inline=False)
-            embed.set_footer(text=f"Zirconキャラクター")
-            
-            # 画像をアップロードしてサムネイルに設定
-            with open(temp_png_path, 'rb') as f:
-                file = discord.File(f, filename=f"{character_id}.png")
-                embed.set_thumbnail(url=f"attachment://{character_id}.png")
+            embed.set_footer(text="Zirconキャラクター")
+            embed.set_thumbnail(url=f"attachment://{character_id}.png")
+            file = discord.File(path, filename=f"{character_id}.png")
+            try:
                 await channel.send(embed=embed, file=file)
+            finally:
+                file.close()
             return True
-            
-        except Exception as e:
-            logger.error(f"Error in _announce_zircon_birthday: {e}")
-            logger.error(traceback.format_exc())
+        except Exception:
+            logger.exception("誕生日の画像取得または送信に失敗しました: %s", character_id)
             return False
-        finally:
-            # 一時ファイルの確実なクリーンアップ
-            for path in [temp_webp_path, temp_png_path]:
-                if path and os.path.exists(path):
-                    try:
-                        os.remove(path)
-                    except Exception as cleanup_error:
-                        logger.warning(f"一時ファイルの削除に失敗: {path}, {cleanup_error}")
 
     def load_birthdays(self):
         """誕生日データを読み込みます（リスト形式）。dataフォルダがなければ作成。"""

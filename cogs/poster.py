@@ -1,7 +1,6 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import urllib.request
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -17,10 +16,12 @@ import config
 import platform
 import math
 import asyncio
-import functools
 
 import os
 import io
+from contextlib import ExitStack
+import tempfile
+from image_cache import download_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class Poster(commands.Cog):
         self.brave_path = config.POSTER_BRAVE_PATH
         self.glory_path = config.POSTER_GLORY_PATH
         self.freedom_path = config.POSTER_FREEDOM_PATH
-        self.dst_path = config.POSTER_DST_PATH
+        self._generation_lock = asyncio.Lock()
         
         # 画像アセットの存在確認
         self._check_assets()
@@ -143,7 +144,16 @@ class Poster(commands.Cog):
         
         try:
             logger.info("フォントが見つからないため、Noto Sans JP をダウンロードします: %s", font_url)
-            urllib.request.urlretrieve(font_url, font_path)
+            content = download_bytes(font_url, timeout=20, max_bytes=30 * 1024 * 1024)
+            fd, temporary = tempfile.mkstemp(prefix=".font-", dir=fonts_dir)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(content)
+                ImageFont.truetype(temporary, 12)  # HTMLや破損ファイルをキャッシュしない
+                os.replace(temporary, font_path)
+            finally:
+                if os.path.exists(temporary):
+                    os.remove(temporary)
             logger.info("フォントをダウンロードしました: %s", font_path)
             return font_path
         except Exception as e:
@@ -219,7 +229,8 @@ class Poster(commands.Cog):
                 candidate = os.path.join(assets_dir, f"{base}.png")
                 if os.path.exists(candidate):
                     try:
-                        flag_img = Image.open(candidate)
+                        with Image.open(candidate) as flag_source:
+                            flag_img = flag_source.copy()
                         logger.info(f"国旗画像を読み込みました: {candidate}")
                         break
                     except Exception as e:
@@ -564,6 +575,9 @@ class Poster(commands.Cog):
         else:
             logger.info(f"国旗画像が見つかりませんでした。country={country_clean}")
         
+        char_resized.close()
+        if flag_img is not None:
+            flag_img.close()
         return canvas
 
     def _scrape_character_info(self, character_id: str) -> dict:
@@ -660,94 +674,51 @@ class Poster(commands.Cog):
                 except Exception as e:
                     logger.error(f"Seleniumドライバの終了に失敗: {e}")
 
-    @app_commands.command(
-        name="poster", 
-        description="キャラクターポスターを作成します"
-    )
-    @app_commands.describe(
-        character_id="キャラクターIDを入力してください"
-    )
-    async def poster(self, interaction: discord.Interaction, character_id: str):
+    def _render_poster(self, character_id: str) -> bytes:
+        """通信、Selenium、合成をワーカースレッド内で完結させる。"""
+        path = config.IMAGE_CACHE.get_sync(config.get_character_image_url(character_id))
+        info = self._scrape_character_info(character_id)
+        with ExitStack() as stack:
+            source = stack.enter_context(Image.open(path))
+            char = stack.enter_context(source.convert("RGB"))
+            mask = stack.enter_context(Image.open(self.mask_path)) if os.path.exists(self.mask_path) else None
+            poster = stack.enter_context(self._draw_poster(char, mask, info))
+            with io.BytesIO() as output:
+                poster.save(output, format="PNG")
+                return output.getvalue()
 
-        # 画像アセットの存在確認（マスクと国旗はオプション）
-        # 現在は必須アセットなし（すべてオプション）
-        optional_assets = [
-            ('mask.png', self.mask_path),
-            ('peaceful.png', self.peaceful_path),
-            ('brave.png', self.brave_path),
-            ('glory.png', self.glory_path),
-            ('freedom.png', self.freedom_path),
-        ]
-        
-        missing = [name for name, path in optional_assets if not os.path.exists(path)]
-        
-        if missing:
-            logger.info(f"オプション画像が不足していますが、処理を続行します: {', '.join(missing)}")
-        
-        await interaction.response.send_message(
-            "キャラクターカード作成中です\nカードが完成するまでコマンドを入力しないようお願いします"
-        )
+    @app_commands.guild_only()
+    @app_commands.command(name="poster", description="キャラクターポスターを作成します")
+    @app_commands.describe(character_id="キャラクターIDを入力してください")
+    async def poster(self, interaction: discord.Interaction, character_id: str):
+        character_id = character_id.strip()
+        if not character_id.isascii() or not character_id.isdigit():
+            await interaction.response.send_message("キャラクターIDは半角数字で入力してください。", ephemeral=True)
+            return
+        await interaction.response.defer(thinking=True)
         try:
-            # キャラ画像URL取得（config.pyで一元管理）
-            url = config.get_character_image_url(character_id)
-            try:
-                urllib.request.urlretrieve(url, self.dst_path)
-            except Exception as e:
-                logger.error(f"画像のダウンロードに失敗: {e}")
-                await interaction.followup.send("キャラクター画像の取得に失敗しました。番号が正しいかご確認ください。", ephemeral=True)
-                return
-            try:
-                # キャラクター画像を開く
-                char = Image.open(self.dst_path)
-                
-                # WebP形式の場合はPNGに変換
-                if char.format == 'WEBP':
-                    char = char.convert('RGB')
-                
-                # マスク画像（オプション）
-                mask = None
-                if os.path.exists(self.mask_path):
-                    mask = Image.open(self.mask_path)
-                
-                # 注: peaceful, brave, glory, freedom 画像は現在使用されていません
-                # 将来の機能拡張のために読み込み処理は残していますが、_draw_poster()には渡していません
-            except Exception as e:
-                logger.error(f"画像ファイルの読み込みに失敗: {e}")
-                await interaction.followup.send("画像ファイルの読み込みに失敗しました。管理者に連絡してください。", ephemeral=True)
-                return
-            # Seleniumでキャラ情報取得（ブロッキング処理をスレッドプールで実行）
-            try:
-                info = await asyncio.to_thread(
-                    self._scrape_character_info, character_id
-                )
-            except Exception as e:
-                logger.error(f"Selenium/スクレイピングに失敗: {e}", exc_info=True)
-                await interaction.followup.send("キャラクター情報の取得に失敗しました。番号が正しいか、または公式サイトの仕様変更がないかご確認ください。", ephemeral=True)
-                return
-            try:
-                poster_img = self._draw_poster(char, mask, info)
-                img_bytes = io.BytesIO()
-                poster_img.save(img_bytes, format='PNG')
-                img_bytes.seek(0)
-            except Exception as e:
-                logger.error(f"画像合成・保存に失敗: {e}")
-                await interaction.followup.send("画像の合成または保存に失敗しました。管理者に連絡してください。", ephemeral=True)
-                return
-            # ポスター画像をユーザーに送信
-            try:
-                filename = f"poster_{character_id}.png"
-                await interaction.followup.send(
-                    content=f"✅ キャラクター #{character_id} のポスターが完成しました！",
-                    file=discord.File(img_bytes, filename=filename)
-                )
-            except Exception as e:
-                logger.error(f"Discordへの画像送信に失敗: {e}")
-                await interaction.followup.send("画像の送信に失敗しました。管理者に連絡してください。", ephemeral=True)
-                return
-        except Exception as e:
-            logger.error(f"予期せぬエラー: {e}")
-            logger.error(traceback.format_exc())
-            await interaction.followup.send("エラーが発生しました。管理者に連絡してください。", ephemeral=True)
+            async with self._generation_lock:
+                worker = asyncio.create_task(asyncio.to_thread(self._render_poster, character_id))
+                try:
+                    content = await asyncio.shield(worker)
+                except asyncio.CancelledError:
+                    # スレッドはキャンセルできないため、完了まで生成枠を保持する。
+                    try:
+                        await worker
+                    finally:
+                        raise
+            with io.BytesIO(content) as output:
+                file = discord.File(output, filename=f"poster_{character_id}.png")
+                try:
+                    await interaction.followup.send(
+                        content=f"✅ キャラクター #{character_id} のポスターが完成しました！",
+                        file=file,
+                    )
+                finally:
+                    file.close()
+        except Exception:
+            logger.exception("ポスターの生成または送信に失敗しました: %s", character_id)
+            await interaction.followup.send("ポスターを作成できませんでした。番号・通信状態をご確認ください。", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Poster(bot))

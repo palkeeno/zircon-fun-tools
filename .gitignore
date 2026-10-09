@@ -62,3 +62,7 @@ data/assets/*.jpeg
 poster_output.png
 # Previous successful JSON saves
 data/*.json.bak
+
+# Persistent downloaded assets
+data/cache/
+data/fonts/
