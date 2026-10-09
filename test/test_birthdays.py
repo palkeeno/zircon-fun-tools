@@ -72,7 +72,7 @@ class BirthdayFixTests(unittest.IsolatedAsyncioTestCase):
                 command = getattr(cog, prefix + '_' + suffix)
                 self.assertTrue(command.guild_only)
                 self.assertTrue(command.default_permissions.administrator)
-                self.assertTrue(command.checks)
+                self.assertEqual(command.checks, [])
 
 class BirthdayTests(unittest.IsolatedAsyncioTestCase):
 

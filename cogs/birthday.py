@@ -390,7 +390,6 @@ class Birthday(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(name="birthday_update", description="ファイルからデータを一括更新します（全置換）")
     @app_commands.describe(file="更新用ファイル（CSV/JSON）")
     async def birthday_update(self, interaction: discord.Interaction, file: discord.Attachment):
@@ -477,7 +476,6 @@ class Birthday(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(
         name="birthday_toggle",
         description="誕生日の自動投稿をON/OFFします"
@@ -498,7 +496,6 @@ class Birthday(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(
         name="birthday_schedule",
         description="誕生日の自動投稿時刻を設定します (時のみ指定)"
@@ -535,7 +532,6 @@ class Birthday(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(name="birthday_add", description="誕生日を1件追加します")
     async def birthday_add(self, interaction: discord.Interaction, character_id: str, name: str, month: int, day: int):
         await interaction.response.defer(ephemeral=True)
@@ -546,7 +542,6 @@ class Birthday(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(name="birthday_edit", description="キャラクターIDを指定して誕生日を編集します")
     async def birthday_edit(self, interaction: discord.Interaction, character_id: str, name: Optional[str] = None,
                             month: Optional[int] = None, day: Optional[int] = None):
@@ -563,7 +558,6 @@ class Birthday(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(name="birthday_delete", description="キャラクターIDを指定して誕生日を削除します（confirm:trueで確定）")
     async def birthday_delete(self, interaction: discord.Interaction, character_id: str, confirm: bool = False):
         await interaction.response.defer(ephemeral=True)

@@ -316,7 +316,6 @@ class Quotes(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(name="quote_update", description="ファイルから名言データを一括更新します（全置換）")
     @app_commands.describe(file="更新用ファイル（CSV/JSON）")
     async def quote_update(self, interaction: discord.Interaction, file: discord.Attachment):
@@ -336,7 +335,6 @@ class Quotes(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(name="quote_add", description="名言を1件追加します")
     async def quote_add(self, interaction: discord.Interaction, speaker: str, text: str, character_id: Optional[str] = None):
         await interaction.response.defer(ephemeral=True)
@@ -351,7 +349,6 @@ class Quotes(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(name="quote_edit", description="IDを指定して名言を編集します")
     @app_commands.describe(clear_character="trueでキャラクターIDを解除（character_idとの併用不可）")
     async def quote_edit(self, interaction: discord.Interaction, quote_id: str, speaker: Optional[str] = None,
@@ -375,7 +372,6 @@ class Quotes(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(name="quote_delete", description="IDを指定して名言を削除します（confirm:trueで確定）")
     async def quote_delete(self, interaction: discord.Interaction, quote_id: str, confirm: bool = False):
         await interaction.response.defer(ephemeral=True)
@@ -392,7 +388,6 @@ class Quotes(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(name="quote_toggle", description="名言の定期投稿をON/OFFします")
     @app_commands.describe(enabled="true で有効化、false で無効化")
     async def quote_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
@@ -402,7 +397,6 @@ class Quotes(commands.Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.command(name="quote_schedule", description="名言の定期投稿スケジュールを設定します")
     @app_commands.describe(
         days="何日おきに投稿するか (1以上の整数)",

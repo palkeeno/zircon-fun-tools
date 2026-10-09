@@ -487,3 +487,4 @@ pip freeze > requirements.txt
 Python 3.10以上。テストはtestパッケージのbootstrapで認証設定と保存先を一時値へ分離する。新しいテストもアプリimportより前に`import test`を置く。main/configのimportでBotを起動・認証検証・フォントインストールしない。データ検証はquote_records.py / birthday_records.py、コマンド共通エラー応答はcommand_errors.pyへ集約する。新しいCogを加えたらtest/run_tests.pyのコピー対象も確認する。
 
 本番監視はsystemdのみ。フォント準備はセットアップ時、ポスターは上限付きキューと永続キャッシュを使う。変更確認はpython test/run_tests.py、直接unittest実行、Windows/Ubuntu CIを利用する。
+画像取得は `config.IMAGE_CACHE` を共有し、同期I/O・画像合成はワーカースレッドへ移します。JSON保存は `utils.atomic_write_json()` を使います。単一サーバー用のため、対象 `GUILD_ID` 未設定時は起動・同期を拒否します。管理コマンドは `default_permissions` による初期権限のみ設定し、運用上の許可はDiscord側で管理します。

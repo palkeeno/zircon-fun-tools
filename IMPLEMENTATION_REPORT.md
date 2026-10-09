@@ -1,6 +1,6 @@
 # Community tools improvement audit
 
-Base: `origin/main` at `f9b669a`. Uncommitted changes in the user's original checkout are excluded.
+Base: latest `origin/main` at `435a375` (including the target-guild synchronization fix). Uncommitted changes in the user's original checkout are excluded.
 
 | Requested requirement | Implementation | Evidence |
 |---|---|---|
@@ -26,7 +26,7 @@ Base: `origin/main` at `f9b669a`. Uncommitted changes in the user's original che
 
 ## Verification
 
-- Windows / Python 3.11: 88 tests pass through `python test/run_tests.py`.
+- Windows / Python 3.11: 93 tests pass through `python test/run_tests.py`.
 - Direct `python -m unittest discover test`: same suite, disposable configuration and data.
 - Bash syntax checks for scripts; installer exercised with fake sudo/systemctl/crontab, including a path containing spaces and `%` and a legacy-PID refusal.
 - CI: Windows/Ubuntu and Python 3.10/3.12 (results must be checked on the PR head).
