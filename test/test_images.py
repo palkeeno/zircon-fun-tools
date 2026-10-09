@@ -75,6 +75,20 @@ class CacheTests(unittest.TestCase):
                 self.assertEqual(image.format, 'PNG')
                 self.assertEqual(image.getpixel((0, 0)), (255, 0, 0, 255))
 
+    def test_birthday_and_poster_share_one_download(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache = ImageCache(directory)
+            poster = Poster(MagicMock())
+            poster.mask_path = str(Path(directory) / 'no-mask.png')
+            channel = MagicMock()
+            channel.send = AsyncMock()
+            before = self.requests
+            with patch.object(config, 'IMAGE_CACHE', cache), patch('config.get_character_image_url', return_value=self.url), patch.object(poster, '_scrape_character_info', return_value={}), patch.object(poster, '_draw_poster', return_value=Image.new('RGB', (8, 8))):
+                poster._render_poster('1')
+                birthday = Birthday.__new__(Birthday)
+                self.assertTrue(asyncio.run(birthday._announce_zircon_birthday(channel, dict(character_id='1', name='A', month=1, day=1))))
+            self.assertEqual(self.requests - before, 1)
+
     def test_corrupted_cache_downloaded_again(self):
         with tempfile.TemporaryDirectory() as directory:
             cache = ImageCache(directory)
@@ -191,4 +205,3 @@ class PosterTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.gather(*tasks)
         self.assertEqual(peak, 1)
         self.assertEqual(sorted(received), [('poster_1.png', b'1'), ('poster_2.png', b'2')])
-
