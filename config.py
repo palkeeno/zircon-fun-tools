@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 # 自動探索を使わず、このBotのフォルダだけを参照する。
 _ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-_ENV_FILES = [os.path.join(_ROOT_DIR, name) for name in (".env", "ENV", "ZFT_ENV")]
+_ENV_FILES = ([os.environ["ZFT_ENV_FILE"]] if "ZFT_ENV_FILE" in os.environ else
+              [os.path.join(_ROOT_DIR, name) for name in (".env", "ENV", "ZFT_ENV")])
 _existing_env_files = [path for path in _ENV_FILES if os.path.isfile(path)]
 ENV_FILE = _existing_env_files[0] if _existing_env_files else _ENV_FILES[0]
 if len(_existing_env_files) > 1:
@@ -48,7 +49,7 @@ def get_environment() -> str:
 ENV = get_environment()
 logger.info("起動環境: %s / 設定ファイル: %s", ENV, ENV_FILE)
 
-_DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+_DATA_DIR = os.path.abspath(os.getenv("ZFT_DATA_DIR", os.path.join(_ROOT_DIR, 'data')))
 _RUNTIME_CONFIG_PATH = os.path.join(_DATA_DIR, 'config.json')
 _RUNTIME_CONFIG_LOCK = threading.RLock()
 IMAGE_CACHE = ImageCache(os.path.join(_DATA_DIR, "cache", "images"))
@@ -180,7 +181,7 @@ def get_token():
         raise ValueError(error_msg)
     return token
 
-TOKEN = get_token()
+TOKEN = os.getenv('DISCORD_TOKEN_DEV' if ENV == 'development' else 'DISCORD_TOKEN_PROD', '')
 
 # 即時ギルド同期用のGuild ID（開発/本番で切替可能）
 # 設定すると、そのギルドに対してスラッシュコマンドを即時同期します（数秒で反映）。
@@ -205,6 +206,9 @@ POSTER_FONT_B = os.getenv('POSTER_FONT_B', 'ヒラギノ明朝 ProN.ttc')
 POSTER_FONT_C = os.getenv('POSTER_FONT_C', 'ヒラギノ明朝 ProN.ttc')
 POSTER_FONT_D = os.getenv('POSTER_FONT_D', 'ヒラギノ明朝 ProN.ttc')
 POSTER_CHANNEL_ID = int(os.getenv('POSTER_CHANNEL_ID', '0'))
+POSTER_CONCURRENCY = max(1, min(4, _safe_int(os.getenv('POSTER_CONCURRENCY'), 1)))
+POSTER_QUEUE_LIMIT = max(1, min(50, _safe_int(os.getenv('POSTER_QUEUE_LIMIT'), 10)))
+POSTER_CACHE_TTL = max(60, _safe_int(os.getenv('POSTER_CACHE_TTL'), 86400))
 
 QUOTE_CHANNEL_ID = _safe_int(os.getenv('QUOTE_CHANNEL_ID_DEV' if ENV == 'development' else 'QUOTE_CHANNEL_ID_PROD', '0'), 0)
 

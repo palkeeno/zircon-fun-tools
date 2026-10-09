@@ -1,3 +1,4 @@
+import test  # isolate credentials and storage before importing application code
 """
 設定ファイルのテスト
 このモジュールは、config.pyの機能をテストします。

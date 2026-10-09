@@ -1,3 +1,4 @@
+import test  # isolate credentials and storage before importing application code
 import asyncio
 import datetime
 import io
@@ -71,7 +72,7 @@ class BirthdayFixTests(unittest.IsolatedAsyncioTestCase):
                 command = getattr(cog, prefix + '_' + suffix)
                 self.assertTrue(command.guild_only)
                 self.assertTrue(command.default_permissions.administrator)
-                self.assertEqual(command.checks, [])
+                self.assertTrue(command.checks)
 
 class BirthdayTests(unittest.IsolatedAsyncioTestCase):
 

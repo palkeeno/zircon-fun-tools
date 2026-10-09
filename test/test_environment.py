@@ -1,3 +1,4 @@
+import test  # isolate credentials and storage before importing application code
 import asyncio
 import datetime
 import io
@@ -36,7 +37,7 @@ class EnvironmentTests(unittest.TestCase):
                 (app / filename).write_text('ENV=production\nDISCORD_TOKEN_PROD=local_dummy\nGUILD_ID_PROD=123\nBIRTHDAY_CHANNEL_ID_PROD=456\nQUOTE_CHANNEL_ID_PROD=789\n', encoding='utf-8')
                 env = os.environ.copy()
                 for key in list(env):
-                    if key in {'ENV', 'ZFT_ENV'} or key.startswith(('DISCORD_TOKEN_', 'GUILD_ID_', 'BIRTHDAY_CHANNEL_ID_', 'QUOTE_CHANNEL_ID_')):
+                    if key in {'ENV', 'ZFT_ENV', 'ZFT_ENV_FILE', 'ZFT_DATA_DIR'} or key.startswith(('DISCORD_TOKEN_', 'GUILD_ID_', 'BIRTHDAY_CHANNEL_ID_', 'QUOTE_CHANNEL_ID_')):
                         env.pop(key)
                 script = "import sys; sys.path.insert(0, sys.argv[1]); import config; assert config.ENV == 'production'; assert config.TOKEN == 'local_dummy'; assert (config.GUILD_ID, config.BIRTHDAY_CHANNEL_ID, config.QUOTE_CHANNEL_ID) == (123,456,789)"
                 result = subprocess.run([sys.executable, '-c', script, str(app)], cwd=other, env=env, capture_output=True, timeout=15)
@@ -60,7 +61,7 @@ class ProcessEnvironmentPrecedenceTests(unittest.TestCase):
                         shutil.copy2(source, app / name)
                 (app / ".env").write_text(f"{file_key}=development\nDISCORD_TOKEN_DEV=file_dummy\n", encoding="utf-8")
                 environment = os.environ.copy()
-                for key in ["ENV", "ZFT_ENV"]:
+                for key in ["ENV", "ZFT_ENV", "ZFT_ENV_FILE", "ZFT_DATA_DIR"]:
                     environment.pop(key, None)
                 environment.update({process_key: "production", "DISCORD_TOKEN_PROD": "process_dummy"})
                 result = subprocess.run([sys.executable, "-c", "import config; assert config.ENV == 'production'; assert config.TOKEN == 'process_dummy'"], cwd=app, env=environment, capture_output=True, timeout=15)
