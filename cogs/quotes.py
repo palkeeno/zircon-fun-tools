@@ -342,6 +342,8 @@ class Quotes(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+    @app_commands.guild_only()
+    @app_commands.default_permissions(administrator=True)
     @app_commands.command(name="quote_update", description="ファイルから名言データを一括更新します（全置換）")
     @app_commands.describe(file="更新用ファイル（CSV/JSON）")
     async def quote_update(self, interaction: discord.Interaction, file: discord.Attachment):
@@ -434,6 +436,8 @@ class Quotes(commands.Cog):
             logger.error(f"Error in quote_update: {e}", exc_info=True)
             await interaction.followup.send("更新中にエラーが発生しました。", ephemeral=True)
 
+    @app_commands.guild_only()
+    @app_commands.default_permissions(administrator=True)
     @app_commands.command(name="quote_toggle", description="名言の定期投稿をON/OFFします")
     @app_commands.describe(enabled="true で有効化、false で無効化")
     async def quote_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
@@ -441,6 +445,8 @@ class Quotes(commands.Cog):
         state = "有効" if enabled else "無効"
         await interaction.response.send_message(f"名言の定期投稿を{state}にしました。", ephemeral=True)
 
+    @app_commands.guild_only()
+    @app_commands.default_permissions(administrator=True)
     @app_commands.command(name="quote_schedule", description="名言の定期投稿スケジュールを設定します")
     @app_commands.describe(
         days="何日おきに投稿するか (1以上の整数)",
