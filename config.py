@@ -7,18 +7,43 @@ import os
 import json
 import logging
 from typing import Dict, Any, Optional
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-try:
-    load_dotenv()
-except Exception as e:
-    logger.error(f".envファイルの読み込みに失敗しました: {e}")
-    raise
+# 自動探索を使わず、このBotのフォルダだけを参照する。
+_ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+_ENV_FILES = [os.path.join(_ROOT_DIR, name) for name in (".env", "ENV", "ZFT_ENV")]
+_existing_env_files = [path for path in _ENV_FILES if os.path.isfile(path)]
+ENV_FILE = _existing_env_files[0] if _existing_env_files else _ENV_FILES[0]
+if len(_existing_env_files) > 1:
+    logger.warning("環境設定ファイルが複数あります。%s のみを読み込みます", ENV_FILE)
+# ENV と ZFT_ENV は同じ設定の別名なので、プロセスで片方が指定されていれば
+# ファイル側の別名も読み込まない（サービスの指定をファイルで逆転させない）。
+_process_has_environment = any(name in os.environ for name in ("ENV", "ZFT_ENV"))
+for _key, _value in dotenv_values(ENV_FILE, encoding="utf-8-sig").items():
+    if _process_has_environment and _key in {"ENV", "ZFT_ENV"}:
+        continue
+    if _value is not None:
+        os.environ.setdefault(_key, _value)
 
-ENV = os.getenv('ZFT_ENV', 'development')  # デフォルトは開発環境
+
+def get_environment() -> str:
+    """既存のサービス設定 ZFT_ENV を優先し、ENV も受け付ける。"""
+    legacy = os.getenv("ZFT_ENV")
+    standard = os.getenv("ENV")
+    if legacy is not None and standard is not None and legacy.strip().lower() != standard.strip().lower():
+        logger.warning("ENV と ZFT_ENV が異なります。既存設定 ZFT_ENV を優先します")
+    value = legacy if legacy is not None else standard
+    environment = "development" if value is None else value.strip().lower()
+    if environment not in {"development", "production"}:
+        raise ValueError("ENV / ZFT_ENV は development または production を指定してください")
+    return environment
+
+
+ENV = get_environment()
+logger.info("起動環境: %s / 設定ファイル: %s", ENV, ENV_FILE)
 
 _DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 _RUNTIME_CONFIG_PATH = os.path.join(_DATA_DIR, 'config.json')
@@ -136,7 +161,7 @@ def get_token():
     現在の環境変数に基づいてトークンを取得します。
     テスト用に関数化。
     """
-    ENV = os.getenv('ZFT_ENV', 'development')
+    ENV = get_environment()
     token = os.getenv('DISCORD_TOKEN_DEV' if ENV == 'development' else 'DISCORD_TOKEN_PROD')
     if not token:
         error_msg = "トークンが設定されていません。環境変数を設定してください。"
@@ -148,7 +173,7 @@ TOKEN = get_token()
 
 # 即時ギルド同期用のGuild ID（開発/本番で切替可能）
 # 設定すると、そのギルドに対してスラッシュコマンドを即時同期します（数秒で反映）。
-# 未設定(0)の場合はグローバル同期のみとなり、反映まで最大1時間かかることがあります。
+# 未設定(0)の場合はグローバル同期のみとなります。
 GUILD_ID = int(os.getenv('GUILD_ID_DEV' if ENV == 'development' else 'GUILD_ID_PROD', '0'))
 
 BIRTHDAY_CHANNEL_ID = int(os.getenv('BIRTHDAY_CHANNEL_ID_DEV' if ENV == 'development' else 'BIRTHDAY_CHANNEL_ID_PROD', '0'))

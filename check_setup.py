@@ -26,8 +26,12 @@ def main():
     # .env ファイルのチェック
     print("📋 環境変数ファイル")
     print("-" * 60)
-    env_path = os.path.join(script_dir, '.env')
-    if not check_file_exists(env_path, '.env ファイル'):
+    candidates = [os.path.join(script_dir, name) for name in ('.env', 'ENV', 'ZFT_ENV')]
+    existing = [path for path in candidates if os.path.isfile(path)]
+    env_path = existing[0] if existing else candidates[0]
+    if len(existing) > 1:
+        print(f'   複数の設定ファイルがあります。{env_path} のみを読み込みます')
+    if not check_file_exists(env_path, '環境変数ファイル'):
         print("   ⚠️  .env ファイルを作成し、必要な環境変数を設定してください")
         all_ok = False
     print()

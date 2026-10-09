@@ -27,6 +27,8 @@ ENV/
 
 # Environment Variables
 .env
+/ENV
+/ZFT_ENV
 
 # IDE
 .idea/
