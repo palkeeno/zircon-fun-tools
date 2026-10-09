@@ -8,6 +8,7 @@ import json
 import logging
 import threading
 import utils
+from image_cache import ImageCache
 from typing import Dict, Any, Optional
 from dotenv import dotenv_values
 
@@ -50,6 +51,7 @@ logger.info("起動環境: %s / 設定ファイル: %s", ENV, ENV_FILE)
 _DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 _RUNTIME_CONFIG_PATH = os.path.join(_DATA_DIR, 'config.json')
 _RUNTIME_CONFIG_LOCK = threading.RLock()
+IMAGE_CACHE = ImageCache(os.path.join(_DATA_DIR, "cache", "images"))
 
 # =============================================================================
 # 外部URL設定（一元管理）
@@ -195,7 +197,7 @@ POSTER_PEACEFUL_PATH = os.getenv('POSTER_PEACEFUL_PATH', os.path.join(_ASSETS_DI
 POSTER_BRAVE_PATH = os.getenv('POSTER_BRAVE_PATH', os.path.join(_ASSETS_DIR, 'brave.png'))
 POSTER_GLORY_PATH = os.getenv('POSTER_GLORY_PATH', os.path.join(_ASSETS_DIR, 'glory.png'))
 POSTER_FREEDOM_PATH = os.getenv('POSTER_FREEDOM_PATH', os.path.join(_ASSETS_DIR, 'freedom.png'))
-# 環境に依存しないパス構築（プロジェクトルートからの相対パス）
+# 旧設定との互換性のため保持。生成処理は共有出力ファイルを使いません。
 _POSTER_DST_DEFAULT = os.path.join(os.path.dirname(__file__), 'poster_output.png')
 POSTER_DST_PATH = os.getenv('POSTER_DST_PATH', _POSTER_DST_DEFAULT)
 POSTER_FONT_A = os.getenv('POSTER_FONT_A', 'ヒラギノ明朝 ProN.ttc')
