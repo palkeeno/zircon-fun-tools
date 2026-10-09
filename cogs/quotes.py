@@ -92,7 +92,6 @@ class Quotes(commands.Cog):
 
     async def _change_settings(self, values: Dict[str, Any]) -> None:
         async with self._data_lock:
-            await asyncio.to_thread(save_snapshot, self, "quote", "settings")
             updated = {**self.settings, **values}
             await asyncio.to_thread(config.set_runtime_section, "quotes", updated)
             self.settings = updated
