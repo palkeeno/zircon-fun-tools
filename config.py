@@ -184,7 +184,7 @@ TOKEN = get_token()
 
 # 即時ギルド同期用のGuild ID（開発/本番で切替可能）
 # 設定すると、そのギルドに対してスラッシュコマンドを即時同期します（数秒で反映）。
-# 未設定(0)の場合はグローバル同期のみとなります。
+# 単一サーバー専用のため未設定(0)なら起動を拒否します。
 GUILD_ID = int(os.getenv('GUILD_ID_DEV' if ENV == 'development' else 'GUILD_ID_PROD', '0'))
 
 BIRTHDAY_CHANNEL_ID = int(os.getenv('BIRTHDAY_CHANNEL_ID_DEV' if ENV == 'development' else 'BIRTHDAY_CHANNEL_ID_PROD', '0'))
