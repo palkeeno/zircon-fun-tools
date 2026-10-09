@@ -229,7 +229,7 @@ def save_data(data):
 ### テストの実行
 
 ```bash
-python -m unittest discover test
+python test/run_tests.py
 # または
 python test/run_tests.py
 ```
@@ -447,7 +447,7 @@ python main.py
 
 ```bash
 # すべてのテストを実行
-python -m unittest discover test
+python test/run_tests.py
 
 # 特定のテストのみ実行
 python -m unittest test.test_cogs.TestBirthday
@@ -481,3 +481,9 @@ pip freeze > requirements.txt
 ---
 
 **最終更新日**: 2026-01-15
+
+## 運用・検証の現行規約
+
+Python 3.10以上。テストはtestパッケージのbootstrapで認証設定と保存先を一時値へ分離する。新しいテストもアプリimportより前に`import test`を置く。main/configのimportでBotを起動・認証検証・フォントインストールしない。データ検証はquote_records.py / birthday_records.py、コマンド共通エラー応答はcommand_errors.pyへ集約する。新しいCogを加えたらtest/run_tests.pyのコピー対象も確認する。
+
+本番監視はsystemdのみ。フォント準備はセットアップ時、ポスターは上限付きキューと永続キャッシュを使う。変更確認はpython test/run_tests.py、直接unittest実行、Windows/Ubuntu CIを利用する。

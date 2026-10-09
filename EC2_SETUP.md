@@ -1,464 +1,63 @@
-# Zircon Fun Tools - EC2デプロイガイド
+# EC2/Linux運用ガイド
 
-## EC2での初回セットアップ
+本番のプロセス管理は **systemdのみ** に統一します。Discord再接続はdiscord.pyが担当し、プロセス終了時の再起動はsystemdのRestart=on-failureです。watchdog・監視cron・nohupは併用しません。旧watchdog.sh/setup_cron.shは移行案内を表示して終了します。
 
-### 1. 自動セットアップ（推奨）
+## 初回セットアップ
 
-プロジェクトディレクトリで以下を実行：
+Python 3.10以上（推奨3.12）、Chrome/Chromium、日本語フォントが必要です。トークン・チャンネル設定はリポジトリ直下の.envへ設定します。systemdのZFT_ENV=productionで本番設定を選びます。
+
+Amazon Linux 2023の例:
 
 ```bash
-chmod +x setup_ec2.sh
-./setup_ec2.sh
+sudo dnf install -y python3.12 python3.12-pip fontconfig google-noto-sans-cjk-jp-fonts
+cd /path/to/zircon-fun-tools
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python setup_fonts.py --prepare
+.venv/bin/python test/run_tests.py
+bash scripts/install_service.sh
 ```
 
-このスクリプトは以下を自動的に実行します：
-- システムパッケージの更新
-- Python3とpipのインストール
-- 日本語フォント（Noto CJK）のインストール
-- フォントキャッシュの更新
-- Chrome/ChromiumとChromeDriverのインストール（Selenium用）
+Ubuntu/DebianはディストリビューションのPython 3.10以上、venv、fontconfig、fonts-noto-cjkを準備してください。Chrome/Chromiumは公式のインストール手順で準備します。Seleniumが利用できるブラウザが必要です。
 
-### 2. 手動セットアップ
+インストーラーはサービスのテンプレートに現在の絶対パスと実行ユーザーのUIDを埋め込み、.venv/bin/pythonを使用します。実行ユーザーは通常そのスクリプトを起動したユーザーです。別ユーザーで動かす場合はSERVICE_USER=ec2-user bash scripts/install_service.shと指定し、そのユーザーにリポジトリ・フォント・データのアクセス権を与えてください。テンプレートを直接コピーしないでください。
 
-自動スクリプトが使えない場合は、以下を順番に実行：
+フォントは起動前に検証します。既存の日本語フォントがない場合だけ--prepareがNoto Sans JPを取得し、data/fontsへ保存します。生成中にダウンロードやシステムパッケージ変更は行いません。フォントのライセンスは配布元のGoogle Fonts/SIL Open Font Licenseを参照してください。
 
-#### Amazon Linux 2023 / Amazon Linux 2 の場合（推奨）
+## 旧運用からの移行
 
-```bash
-# システム更新
-sudo yum update -y
+1. 旧watchdogの常駐プロセスを特定して停止します。Botを先に止めるとwatchdogが再起動するため、この順序を守ります。
+2. crontab -lでこのプロジェクトのwatchdog.sh --cronエントリーを確認し、crontab -eでその行だけ削除します。別プロジェクトのcronは変更しません。
+3. 旧BotのPIDとコマンド行を確認し、そのBotだけを停止します。pkill -f "python3 main.py"のような広範な停止は避けてください。
+4. Botの停止を確認してから、そのbot.pidを削除します。
+5. 仮想環境と事前フォント準備を済ませ、bash scripts/install_service.shを実行します。
 
-# Python環境
-sudo yum install -y python3 python3-pip
+インストーラーは旧bot.pidや該当プロジェクトの監視cronが残っている場合に停止します。別ユーザーのcronや常駐watchdogは管理者が確認してください。既存JSONデータは削除・初期化しません。
 
-# 日本語フォント（fontconfigも必要）
-sudo yum install -y fontconfig google-noto-sans-cjk-jp-fonts
-
-# フォントキャッシュ更新
-sudo fc-cache -fv
-
-# フォント確認
-fc-list :lang=ja | head -5
-
-# Google Chrome（Amazon Linuxではchromiumパッケージがないため）
-sudo tee /etc/yum.repos.d/google-chrome.repo <<EOF
-[google-chrome]
-name=google-chrome
-baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
-enabled=1
-gpgcheck=1
-gpgkey=https://dl.google.com/linux/linux_signing_key.pub
-EOF
-
-sudo yum install -y google-chrome-stable
-```
-
-#### Ubuntu / Debian の場合
+## 起動・停止・ログ
 
 ```bash
-# システム更新
-sudo apt update
-
-# Python環境
-sudo apt install -y python3 python3-pip
-
-# 日本語フォント
-sudo apt install -y fonts-noto-cjk fonts-noto-cjk-extra
-
-# フォントキャッシュ更新
-sudo fc-cache -fv
-
-# フォント確認
-fc-list :lang=ja | head -5
-
-# Chrome/ChromiumとChromeDriver（Selenium用）
-sudo apt install -y chromium-browser chromium-chromedriver
-```
-
-### 3. Chrome/ChromiumとChromeDriverのインストール（Selenium用）
-
-`poster`コマンドでWebスクレイピングを行うため、Chrome/ChromiumとChromeDriverが必要です。
-
-#### Amazon Linux の場合
-
-Amazon Linuxでは`chromium`パッケージが提供されていないため、Google Chromeを使用します：
-
-```bash
-# Google Chromeリポジトリを追加
-sudo tee /etc/yum.repos.d/google-chrome.repo <<EOF
-[google-chrome]
-name=google-chrome
-baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
-enabled=1
-gpgcheck=1
-gpgkey=https://dl.google.com/linux/linux_signing_key.pub
-EOF
-
-# Google Chromeをインストール
-sudo yum install -y google-chrome-stable
-
-# パス確認
-which google-chrome-stable
-```
-
-#### Ubuntu / Debian の場合
-
-```bash
-# Chromium（推奨、軽量）
-sudo apt install -y chromium-browser chromium-chromedriver
-
-# または、Google Chromeを使用する場合
-wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-sudo apt update
-sudo apt install -y google-chrome-stable
-```
-
-**注意**: ChromeDriverは `requirements.txt` の `webdriver-manager` が自動的にダウンロード・管理するため、別途インストールは不要です。
-
-### 4. Pythonパッケージのインストール
-
-```bash
-pip3 install -r requirements.txt
-```
-
-### 5. 環境変数の設定
-
-`.env`ファイルを作成・編集：
-
-```bash
-cp .env.example .env  # サンプルがある場合
-nano .env
-```
-
-必要な設定：
-- `DISCORD_TOKEN_PROD`: 本番用Discordボットトークン
-- その他、各機能の設定
-
-### 6. ボットの起動
-
-```bash
-# 通常起動
-python3 main.py
-
-# バックグラウンド起動（推奨）
-nohup python3 main.py > bot.log 2>&1 &
-
-# スクリプトを使った起動（最も推奨）
-./scripts/start_bot.sh
-
-# systemdサービスとして起動
-# 後述のsystemd設定を参照
-```
-
-## 自動再起動の設定（nohup + watchdog）
-
-### スクリプト一覧
-
-| スクリプト | 説明 |
-|-----------|------|
-| `scripts/start_bot.sh` | Botをnohupで起動し、PIDとログを記録 |
-| `scripts/stop_bot.sh` | Botを安全に停止 |
-| `scripts/check_bot.sh` | Botの状態を確認 |
-| `scripts/watchdog.sh` | Botを監視し、停止時に自動再起動 |
-| `scripts/setup_cron.sh` | cronジョブを設定 |
-| `scripts/view_logs.sh` | ログを閲覧 |
-
-### 初回セットアップ
-
-```bash
-# スクリプトに実行権限を付与
-chmod +x scripts/*.sh
-
-# Botを起動
-./scripts/start_bot.sh
-
-# ステータス確認
-./scripts/check_bot.sh
-```
-
-### 自動再起動の設定（2つの方法）
-
-#### 方法1: Watchdogをバックグラウンドで常駐（推奨）
-
-```bash
-# Watchdogをバックグラウンドで起動
-nohup ./scripts/watchdog.sh > logs/watchdog_daemon.log 2>&1 &
-
-# 30秒ごとにBotの状態を監視し、停止していれば自動で再起動
-```
-
-#### 方法2: Cronで定期チェック
-
-```bash
-# セットアップスクリプトを実行
-./scripts/setup_cron.sh
-
-# または手動でcronを設定
-crontab -e
-# 以下を追加（5分ごとにチェック）:
-# */5 * * * * /home/zircon-fun-tools/scripts/watchdog.sh --cron
-```
-
-### ログの確認
-
-```bash
-# 最新のBotログを表示
-./scripts/view_logs.sh
-
-# リアルタイムでログを追跡
-./scripts/view_logs.sh -f
-
-# クラッシュログを確認
-./scripts/view_logs.sh crash
-
-# 監視ログを確認
-./scripts/view_logs.sh watchdog
-
-# 全ログファイル一覧
-./scripts/view_logs.sh all
-
-# 古いログを削除（7日以上前）
-./scripts/view_logs.sh clean
-```
-
-### ログファイルの種類
-
-| ファイル | 場所 | 内容 |
-|---------|------|------|
-| `bot_YYYYMMDD_HHMMSS.log` | `logs/` | Bot本体のログ（起動ごとに新規作成） |
-| `crash.log` | `logs/` | クラッシュ時の詳細（最後の50行を記録） |
-| `watchdog.log` | `logs/` | 監視スクリプトのログ |
-| `shutdown.log` | `logs/` | 停止履歴 |
-
-### 運用コマンド
-
-```bash
-# Botの状態確認
-./scripts/check_bot.sh
-
-# Botを再起動
-./scripts/stop_bot.sh && ./scripts/start_bot.sh
-
-# Botを停止（自動再起動を止める場合はwatchdogも停止）
-./scripts/stop_bot.sh
-pkill -f "watchdog.sh"
-```
-
-## systemdサービス設定（最も推奨）
-
-systemdを使用すると、watchdogスクリプトよりも信頼性の高い自動再起動が可能です。
-
-### サービスファイルのインストール
-
-プロジェクトに含まれるサービスファイルをコピーします：
-
-```bash
-# サービスファイルをコピー
-sudo cp scripts/zircon-bot.service /etc/systemd/system/
-
-# 必要に応じてユーザー名やパスを編集
-sudo nano /etc/systemd/system/zircon-bot.service
-
-# systemdをリロード
-sudo systemctl daemon-reload
-```
-
-### サービスファイルの内容
-
-`scripts/zircon-bot.service` には以下の機能が含まれています：
-
-- ネットワーク接続後に起動
-- 異常終了時の自動再起動（10秒後）
-- 1分間に5回以上再起動した場合は停止（無限ループ防止）
-- journalへのログ出力
-- セキュリティ設定（NoNewPrivileges, PrivateTmp）
-
-### サービスの有効化と起動
-
-```bash
-# サービスを有効化（システム起動時に自動起動）
-sudo systemctl enable zircon-bot.service
-
-# サービスを起動
 sudo systemctl start zircon-bot.service
-
-# ステータス確認
+sudo systemctl stop zircon-bot.service
+sudo systemctl restart zircon-bot.service
 sudo systemctl status zircon-bot.service
-
-# ログ確認（リアルタイム）
+sudo journalctl -u zircon-bot.service -n 100 --no-pager
 sudo journalctl -u zircon-bot.service -f
 ```
 
-### サービスの管理コマンド
+start_bot.sh/stop_bot.sh/check_bot.sh/view_logs.shもsystemd操作に委譲します。ログはjournaldで管理し、Bot専用のログ監視cronは作りません。journaldの保存上限はホスト管理者が設定してください。旧ログを手動整理するcleanup_logs.shは残しています。
+
+サービスはSIGINTで終了し、停止猶予は120秒です。ポスター処理中はワーカースレッドの完了を待ちます。再起動制限はUnit側のStartLimitIntervalSec=60とStartLimitBurst=5です。
+
+## 更新と障害対応
 
 ```bash
-# 停止
-sudo systemctl stop zircon-bot.service
-
-# 再起動
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python test/run_tests.py
 sudo systemctl restart zircon-bot.service
-
-# ログ表示（最新100行）
-sudo journalctl -u zircon-bot.service --lines=100
-
-# 今日のログのみ表示
-sudo journalctl -u zircon-bot.service --since today
-
-# エラーログのみ表示
-sudo journalctl -u zircon-bot.service -p err
+sudo journalctl -u zircon-bot.service -n 100 --no-pager
 ```
 
-### systemd vs watchdog
+起動失敗時はログで設定・依存・データ形式を確認します。不正レコードは.rejected.jsonに報告されます。誕生日データの不正時は元データ保護のため機能ロードを停止します。修正後に再起動してください。再起動制限へ達した場合、原因修正後にsudo systemctl reset-failed zircon-bot.serviceを実行します。
 
-| 項目 | systemd | watchdog.sh |
-|------|---------|-------------|
-| 信頼性 | ◎ OS標準 | ○ スクリプト依存 |
-| 自動再起動 | ◎ 組み込み機能 | ○ cronで実現 |
-| ログ管理 | ◎ journalctl | △ 独自ログ |
-| セキュリティ | ◎ サンドボックス可 | △ なし |
-| 設定の複雑さ | △ やや複雑 | ○ シンプル |
-
-**推奨**: 本番環境ではsystemdを使用し、watchdogは開発・テスト用に使用してください。
-
-## フォント関連のトラブルシューティング
-
-### フォントが見つからない場合
-
-```bash
-# インストール済みフォント一覧
-fc-list :lang=ja
-
-# 日本語フォントを再インストール（Amazon Linux）
-sudo yum reinstall -y google-noto-sans-cjk-jp-fonts
-
-# 日本語フォントを再インストール（Ubuntu/Debian）
-sudo apt install --reinstall fonts-noto-cjk fonts-noto-cjk-extra
-
-# キャッシュを強制更新
-sudo fc-cache -fv
-```
-
-### 自動フォント機能について
-
-起動時に `setup_fonts.py` が実行され、以下をチェック：
-1. Linux環境かどうか
-2. 日本語フォントがインストールされているか
-3. root権限がある場合は自動インストール
-4. ない場合は警告メッセージを表示
-
-## セキュリティ設定
-
-### ファイアウォール設定（必要に応じて）
-
-```bash
-# UFWを有効化
-sudo ufw enable
-
-# SSH許可
-sudo ufw allow ssh
-
-# HTTPSアウトバウンド（Discord API用）
-sudo ufw allow out 443/tcp
-```
-
-### 定期的な更新
-
-```bash
-# システムパッケージの更新
-sudo apt update && sudo apt upgrade -y
-
-# Pythonパッケージの更新
-pip3 install --upgrade -r requirements.txt
-```
-
-## 監視とメンテナンス
-
-### ログのローテーション（自動化推奨）
-
-ログファイルの肥大化を防ぐため、自動クリーンアップを設定してください。
-
-#### 方法1: cronによる自動クリーンアップ（推奨）
-
-```bash
-# セットアップスクリプトを実行
-./scripts/setup_cron.sh
-```
-
-これにより以下が設定されます：
-- 5分ごとのBot監視と自動再起動
-- 毎日午前3時に7日以上前のログファイルを自動削除
-
-#### 方法2: 手動でログを削除
-
-```bash
-# 古いログを削除
-./scripts/view_logs.sh clean
-
-# または cleanup_logs.sh を直接実行（日数指定可能）
-./scripts/cleanup_logs.sh 14  # 14日以上前を削除
-```
-
-#### 方法3: logrotateを使用
-
-`/etc/logrotate.d/zircon-bot` を作成：
-
-```
-/home/zircon-fun-tools/logs/*.log {
-    daily
-    rotate 7
-    compress
-    missingok
-    notifempty
-    create 644 ec2-user ec2-user
-}
-```
-
-### クリーンアップスクリプトの機能
-
-`scripts/cleanup_logs.sh` は以下を実行します：
-- 指定日数（デフォルト7日）以上前の `bot_*.log` ファイルを削除
-- `cron.log` が10MB超の場合、最新1000行に切り詰め
-- `watchdog.log` が5MB超の場合、最新500行に切り詰め
-- `crash.log` が5MB超の場合、最新1000行に切り詰め
-- 空のログファイルを削除
-
-### リソース監視
-
-```bash
-# CPU/メモリ使用状況
-top -p $(pgrep -f "python3 main.py")
-
-# ディスク使用状況
-df -h
-```
-
-## トラブルシューティング
-
-### ボットが起動しない
-
-```bash
-# ログ確認
-tail -100 bot.log
-sudo journalctl -u zircon-bot.service -n 100
-
-# 手動起動でエラー確認
-python3 main.py
-```
-
-### 依存関係エラー
-
-```bash
-# requirements.txtを再インストール
-pip3 install --force-reinstall -r requirements.txt
-```
-
-### ディスク容量不足
-
-```bash
-# 古いログを削除
-find . -name "*.log" -mtime +30 -delete
-
-# Pythonキャッシュをクリア
-find . -type d -name __pycache__ -exec rm -r {} +
-```
+本番へ適用する際は実サーバーのsystemd状態、Discordコマンド、実際の投稿を確認してください。ユニットテストは実Botログインや公式サイトの稼働を保証しません。
