@@ -1,28 +1,33 @@
-"""
-テスト実行スクリプト
-このスクリプトは、すべてのテストを実行します。
-"""
+"""実データ・認証情報に触れず、一時コピー上でテストを実行する。"""
 
-import unittest
-import sys
 import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
 
 def run_tests():
-    """すべてのテストを実行します。"""
-    # テストディレクトリをPythonパスに追加
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    root = Path(__file__).resolve().parent.parent
+    with tempfile.TemporaryDirectory(prefix="zft-tests-") as directory:
+        destination = Path(directory)
+        for name in ["main.py", "config.py", "utils.py", "image_cache.py", "setup_fonts.py", "cogs", "test"]:
+            source = root / name
+            if not source.exists():
+                continue
+            if source.is_dir():
+                shutil.copytree(source, destination / name, ignore=shutil.ignore_patterns("__pycache__"))
+            else:
+                shutil.copy2(source, destination / name)
+        environment = os.environ.copy()
+        for key in list(environment):
+            if key in {"ENV", "ZFT_ENV", "ZIRCON_IMAGE_BASE_URL", "ZIRCON_CHARACTER_PAGE_URL"} or key.startswith(("DISCORD_TOKEN_", "GUILD_ID_", "BIRTHDAY_CHANNEL_ID_", "QUOTE_CHANNEL_ID_", "POSTER_")):
+                environment.pop(key)
+        environment.update(PYTHONIOENCODING="utf-8", ENV="development", DISCORD_TOKEN_DEV="test_dummy_token", GUILD_ID_DEV="123", BIRTHDAY_CHANNEL_ID_DEV="0", QUOTE_CHANNEL_ID_DEV="0", POSTER_CHANNEL_ID="0")
+        result = subprocess.run([sys.executable, "-m", "unittest", "discover", "test", "-v"], cwd=destination, env=environment)
+        return result.returncode
 
-    # テストをロード
-    loader = unittest.TestLoader()
-    start_dir = os.path.dirname(os.path.abspath(__file__))
-    suite = loader.discover(start_dir, pattern='test_*.py')
 
-    # テストを実行
-    runner = unittest.TextTestRunner(verbosity=2)
-    result = runner.run(suite)
-
-    # テスト結果に基づいて終了コードを設定
-    sys.exit(not result.wasSuccessful())
-
-if __name__ == '__main__':
-    run_tests() 
+if __name__ == "__main__":
+    sys.exit(run_tests())
