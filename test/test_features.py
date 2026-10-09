@@ -191,6 +191,79 @@ class QuoteCommandsTests(unittest.IsolatedAsyncioTestCase):
 
 
 class BirthdayFeatureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_read_rejects_conflicting_dates_but_keeps_legacy_same_day_duplicates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'birthdays.json'
+            cog = Birthday(MagicMock(), str(path))
+            row = dict(character_id='123', name='A', month=10, day=9)
+            path.write_text(json.dumps([row, row]))
+            cog.load_birthdays()
+            self.assertEqual(len(cog.birthdays), 2)
+            path.write_text(json.dumps([row, {**row, 'day': 10}]))
+            original = path.read_bytes()
+            with self.assertRaises(ValueError):
+                cog.load_birthdays()
+            self.assertEqual(path.read_bytes(), original)
+
+    async def test_duplicate_character_with_different_date_rejected_by_add_and_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'birthdays.json'
+            cog = Birthday(MagicMock(), str(path))
+            item = interaction()
+            await Birthday.birthday_add.callback(cog, item, '123', 'A', 10, 9)
+            original = path.read_bytes()
+            with self.assertRaises(ValueError):
+                await Birthday.birthday_add.callback(cog, item, '123', 'A', 10, 10)
+            self.assertEqual(path.read_bytes(), original)
+            upload = MagicMock(filename='birthdays.json')
+            upload.read = AsyncMock(return_value=b'[{"character_id":"123","name":"A","month":10,"day":9},{"character_id":"123","name":"A","month":10,"day":10}]')
+            await Birthday.birthday_update.callback(cog, item, upload)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertIn('重複', item.followup.send.call_args.args[0])
+
+    async def test_added_today_after_completion_is_announced_without_reposting_existing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cog = Birthday(MagicMock(), str(Path(directory) / 'birthdays.json'))
+            now = datetime.datetime(2026, 10, 9, 10, 0, tzinfo=cog.tz)
+            cog.settings = dict(hour=9, enabled=True, last_announced_date='2026-10-09', last_reset_date='2026-10-09')
+            cog.birthdays = [dict(character_id='old', name='Old', month=10, day=9, reported=True)]
+            cog._announce_zircon_birthday = AsyncMock(return_value=True)
+            await Birthday.birthday_add.callback(cog, interaction(), 'new', 'New', 10, 9)
+            with patch('cogs.birthday.datetime.datetime') as clock, patch('config.get_birthday_channel_id', return_value=123):
+                clock.now.return_value = now
+                await Birthday.birthday_task.coro(cog)
+                await Birthday.birthday_task.coro(cog)
+            cog._announce_zircon_birthday.assert_awaited_once()
+            self.assertEqual(cog._announce_zircon_birthday.call_args.args[1]['character_id'], 'new')
+            self.assertTrue(all(b['reported'] for b in cog.birthdays))
+
+    async def test_bulk_import_preserves_sent_flags_and_reopens_pending_today(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cog = Birthday(MagicMock(), str(Path(directory) / 'birthdays.json'))
+            now = datetime.datetime(2026, 10, 9, 10, 0, tzinfo=cog.tz)
+            cog.settings = dict(hour=9, enabled=True, last_announced_date='2026-10-09', last_reset_date='2026-10-09')
+            cog.birthdays = [dict(character_id='old', name='Old', month=10, day=9, reported=True)]
+            item = interaction()
+            upload = MagicMock(filename='birthdays.json')
+            upload.read = AsyncMock(return_value=b'[{"character_id":"old","name":"Old","month":10,"day":9},{"character_id":"new","name":"New","month":10,"day":9}]')
+            await Birthday.birthday_update.callback(cog, item, upload)
+            self.assertTrue(cog.birthdays[0]['reported'])
+            cog._announce_zircon_birthday = AsyncMock(return_value=True)
+            with patch('cogs.birthday.datetime.datetime') as clock, patch('config.get_birthday_channel_id', return_value=123):
+                clock.now.return_value = now
+                await Birthday.birthday_task.coro(cog)
+            self.assertEqual(cog._announce_zircon_birthday.call_args.args[1]['character_id'], 'new')
+            cog._announce_zircon_birthday.assert_awaited_once()
+
+    async def test_edit_legacy_same_day_duplicates_collapses_one_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cog = Birthday(MagicMock(), str(Path(directory) / 'birthdays.json'))
+            row = dict(character_id='123', name='A', month=10, day=9, reported=True)
+            cog.birthdays = [row, dict(row)]
+            await Birthday.birthday_edit.callback(cog, interaction(), '123', name='B')
+            self.assertEqual(len(cog.birthdays), 1)
+            self.assertEqual(cog.birthdays[0]['name'], 'B')
+
     async def test_actual_command_filters_and_pages_records(self):
         with tempfile.TemporaryDirectory() as directory:
             cog = Birthday(MagicMock(), str(Path(directory) / 'birthdays.json'))

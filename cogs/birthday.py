@@ -189,7 +189,9 @@ class Birthday(commands.Cog):
                 return
 
             today_str = now.date().isoformat()
-            if self.settings.get("last_announced_date") == today_str:
+            pending_today = any(b["month"] == now.month and b["day"] == now.day
+                                and not b.get("reported", False) for b in self.birthdays)
+            if self.settings.get("last_announced_date") == today_str and not pending_today:
                 return
 
             announced = await self._announce_today_birthdays(now)
@@ -283,10 +285,15 @@ class Birthday(commands.Cog):
             rows = json.load(handle)
         if not isinstance(rows, list):
             raise ValueError("birthdays.json must be a list")
-        valid, rejected = [], []
+        valid, rejected, dates_by_id = [], [], {}
         for number, row in enumerate(rows, 1):
             try:
-                valid.append(normalize(row))
+                record = normalize(row)
+                date = (record["month"], record["day"])
+                if record["character_id"] in dates_by_id and dates_by_id[record["character_id"]] != date:
+                    raise ValueError("同じキャラクターIDに異なる誕生日が登録されています")
+                dates_by_id[record["character_id"]] = date
+                valid.append(record)
             except (ValueError, TypeError) as exc:
                 rejected.append({"row": number, "error": str(exc), "record": row})
         self.birthdays = valid
@@ -451,9 +458,9 @@ class Birthday(commands.Cog):
             if not validated:
                 await interaction.followup.send("検証後の有効データが0件のため更新しません。既存データは保持されます。", ephemeral=True)
                 return
-            keys = [(b["character_id"], b["month"], b["day"]) for b in validated]
+            keys = [b["character_id"] for b in validated]
             if len(keys) != len(set(keys)):
-                await interaction.followup.send("同じキャラクターID・日付の重複があるため更新しません。", ephemeral=True)
+                await interaction.followup.send("キャラクターIDの重複があるため更新しません。", ephemeral=True)
                 return
             invalid_count = len(new_birthdays) - len(validated)
             if invalid_count:
@@ -461,6 +468,12 @@ class Birthday(commands.Cog):
                 return
             async with self._data_lock:
                 previous = self.birthdays
+                reported = {}
+                for b in previous:
+                    key = (b["character_id"], b["month"], b["day"])
+                    reported[key] = reported.get(key, False) or b.get("reported", False)
+                for record in validated:
+                    record["reported"] = reported.get((record["character_id"], record["month"], record["day"]), False)
                 self.birthdays = validated
                 try:
                     await asyncio.to_thread(self.save_birthdays)
@@ -519,9 +532,9 @@ class Birthday(commands.Cog):
 
     async def _replace_birthdays(self, records):
         validated = [normalize(record) for record in records]
-        keys = [(b["character_id"], b["month"], b["day"]) for b in validated]
+        keys = [b["character_id"] for b in validated]
         if len(keys) != len(set(keys)):
-            raise ValueError("同じキャラクターID・日付が既に登録されています")
+            raise ValueError("同じキャラクターIDが既に登録されています")
         previous = self.birthdays
         self.birthdays = validated
         try:
@@ -548,12 +561,15 @@ class Birthday(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         async with self._data_lock:
             matches = [b for b in self.birthdays if b['character_id'] == character_id.strip()]
-            if len(matches) != 1:
+            if not matches or len({(b['month'], b['day']) for b in matches}) != 1:
                 raise ValueError("一致する誕生日が1件ではありません。一括更新で整理してください")
             changes = {key: value for key, value in dict(name=name, month=month, day=day).items() if value is not None}
             original = matches[0]
             record = normalize({**original, **changes})
-            await self._replace_birthdays([record if b is original else b for b in self.birthdays])
+            if (record['month'], record['day']) != (original['month'], original['day']):
+                record['reported'] = False
+            # Old same-day duplicates describe one character, so edit them as one record.
+            await self._replace_birthdays([b for b in self.birthdays if b not in matches] + [record])
         await interaction.followup.send("誕生日を編集しました。", ephemeral=True)
 
     @app_commands.guild_only()
