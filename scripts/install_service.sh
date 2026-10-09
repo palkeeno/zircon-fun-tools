@@ -28,4 +28,5 @@ pathlib.Path(output).write_text(unit)
 PY
 sudo install -m 644 "$UNIT_TEMP" /etc/systemd/system/zircon-bot.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now zircon-bot.service
+sudo systemctl enable zircon-bot.service
+sudo systemctl restart zircon-bot.service

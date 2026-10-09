@@ -58,8 +58,13 @@ if [[ "$1" == install ]]; then cp "$4" rendered.service; else echo "$*" >> calls
             self.assertIn('bot space%%name', unit)
             self.assertIn('Restart=on-failure', unit)
             self.assertIn('/.venv/bin/python', unit)
-            self.assertIn('systemctl enable --now zircon-bot.service', (root / 'calls.log').read_text())
+            self.assertIn('systemctl enable zircon-bot.service', (root / 'calls.log').read_text())
+            self.assertIn('systemctl restart zircon-bot.service', (root / 'calls.log').read_text())
             self.assertIn(b'fonts prepared', result.stdout)
+            # Reinstallation must explicitly restart an already running service.
+            result = subprocess.run(command, cwd=root, env=environment, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
+            self.assertEqual((root / 'calls.log').read_text().count('systemctl restart zircon-bot.service'), 2)
             # Legacy PID prevents installation and service start.
             (root / 'calls.log').unlink()
             (root / 'bot.pid').write_text('123')

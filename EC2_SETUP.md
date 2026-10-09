@@ -61,3 +61,5 @@ sudo journalctl -u zircon-bot.service -n 100 --no-pager
 起動失敗時はログで設定・依存・データ形式を確認します。不正レコードは.rejected.jsonに報告されます。誕生日データの不正時は元データ保護のため機能ロードを停止します。修正後に再起動してください。再起動制限へ達した場合、原因修正後にsudo systemctl reset-failed zircon-bot.serviceを実行します。
 
 本番へ適用する際は実サーバーのsystemd状態、Discordコマンド、実際の投稿を確認してください。ユニットテストは実Botログインや公式サイトの稼働を保証しません。
+
+インストーラーを再実行すると、daemon-reload、enable、restartを順に実行します。稼働中のサービスも再起動されるため、実行タイミングを選んでください。

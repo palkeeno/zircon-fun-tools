@@ -26,7 +26,7 @@ Base: latest `origin/main` at `435a375` (including the target-guild synchronizat
 
 ## Verification
 
-- Windows / Python 3.11: 102 tests pass through `python test/run_tests.py`.
+- Windows / Python 3.11: 103 tests pass through `python test/run_tests.py`.
 - Direct `python -m unittest discover test`: same suite, disposable configuration and data.
 - Bash syntax checks for scripts; installer exercised with fake sudo/systemctl/crontab, including a path containing spaces and `%` and a legacy-PID refusal.
 - CI: Windows/Ubuntu and Python 3.10/3.12 (results must be checked on the PR head).
@@ -43,3 +43,6 @@ Each path has an executable regression test in test_features.py.
 
 - Enforce birthday character-ID uniqueness for additions and bulk replacements. Retain legacy same-day duplicates on load and collapse them during individual edits; reject conflicting dates on load.
 - Recheck pending birthdays even after today was marked complete, retaining sent flags through bulk replacement to avoid duplicate celebrations.
+
+- Check metadata TTL before accepting completed PNGs and include metadata content in the image key; a near-expiry asset change cannot extend stale fields beyond their TTL.
+- Explicitly restart the service after reinstalling its unit; the fake-command installer test covers repeated installation.
