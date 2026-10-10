@@ -42,6 +42,7 @@ class FunToolsBot(commands.Bot):
             'cogs.birthday',
             'cogs.oracle',
             'cogs.lottery',
+            'cogs.roll',
             'cogs.poster',
             'cogs.quotes'
         ]
