@@ -1,3 +1,4 @@
+import test  # isolate credentials and storage before importing application code
 import asyncio
 import datetime
 import io
@@ -83,7 +84,7 @@ class CacheTests(unittest.TestCase):
             channel = MagicMock()
             channel.send = AsyncMock()
             before = self.requests
-            with patch.object(config, 'IMAGE_CACHE', cache), patch('config.get_character_image_url', return_value=self.url), patch.object(poster, '_scrape_character_info', return_value={}), patch.object(poster, '_draw_poster', return_value=Image.new('RGB', (8, 8))):
+            with patch.object(config, 'IMAGE_CACHE', cache), patch('config.get_character_image_url', return_value=self.url), patch.object(poster, '_scrape_character_info', return_value={'name': 'Test'}), patch.object(poster, '_draw_poster', return_value=Image.new('RGB', (8, 8))):
                 poster._render_poster('1')
                 birthday = Birthday.__new__(Birthday)
                 self.assertTrue(asyncio.run(birthday._announce_zircon_birthday(channel, dict(character_id='1', name='A', month=1, day=1))))
@@ -193,6 +194,7 @@ class PosterTests(unittest.IsolatedAsyncioTestCase):
         for interaction in interactions:
             interaction.response = AsyncMock()
             interaction.followup = AsyncMock()
+            interaction.edit_original_response = AsyncMock()
 
             async def capture(**kwargs):
                 received.append((kwargs['file'].filename, kwargs['file'].fp.read()))
@@ -205,3 +207,4 @@ class PosterTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.gather(*tasks)
         self.assertEqual(peak, 1)
         self.assertEqual(sorted(received), [('poster_1.png', b'1'), ('poster_2.png', b'2')])
+        await cog.cog_unload()

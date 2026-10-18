@@ -1,3 +1,4 @@
+import test  # Use disposable settings before application imports.
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -22,11 +23,11 @@ class AdminPanelTests(unittest.IsolatedAsyncioTestCase):
         self.interaction.edit_original_response = AsyncMock()
         self.interaction.message.edit = AsyncMock()
 
-    def test_only_four_commands_with_admin_defaults(self):
+    def test_consolidated_controls_and_crud_have_admin_defaults(self):
         commands = Birthday.__cog_app_commands__ + Quotes.__cog_app_commands__
-        self.assertEqual({c.name for c in commands}, {"birthday", "birthday_admin", "quote", "quote_admin"})
+        self.assertEqual({c.name for c in commands}, {"birthday", "birthday_admin", "birthday_add", "birthday_edit", "birthday_delete", "quote", "quote_admin", "quote_add", "quote_edit", "quote_delete"})
         for command in commands:
-            if command.name.endswith("_admin"):
+            if command.name not in {"birthday", "quote"}:
                 self.assertTrue(command.default_permissions.administrator)
                 self.assertTrue(command.guild_only)
                 self.assertEqual(command.checks, [])

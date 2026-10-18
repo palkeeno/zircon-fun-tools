@@ -1,3 +1,4 @@
+import test  # Use disposable settings before application imports.
 """Dice option, ordering, validation, and registration tests."""
 
 import unittest

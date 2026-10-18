@@ -1,3 +1,4 @@
+import test  # isolate credentials and storage before importing application code
 import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
 import discord
@@ -28,10 +29,12 @@ class TestCogs(unittest.IsolatedAsyncioTestCase):
     async def test_birthday_load_and_save(self):
         from cogs.birthday import Birthday
         cog = Birthday(self.bot)
-        # 誕生日データのロード・セーブはファイルI/Oなので、ここでは辞書型で直接テスト
-        cog.birthdays = {"123": {"month": 1, "day": 2}}
-        self.assertEqual(cog.birthdays["123"]["month"], 1)
-        self.assertEqual(cog.birthdays["123"]["day"], 2)
+        cog.birthdays = [{"character_id": "123", "name": "A", "month": 1, "day": 2, "reported": False}]
+        cog.save_birthdays()
+        cog.birthdays = []
+        cog.load_birthdays()
+        self.assertEqual(cog.birthdays[0]["day"], 2)
+        await self.bot.close()
 
     async def test_oracle_init(self):
         from cogs.oracle import Oracle
