@@ -49,7 +49,7 @@ class BirthdayFixTests(unittest.IsolatedAsyncioTestCase):
         file.read = AsyncMock(return_value=b'[{"character_id":"2","month":2,"day":31}]')
         original = self.cog.birthdays
         self.cog.save_birthdays = MagicMock()
-        await Birthday.birthday_update.callback(self.cog, self.interaction, file)
+        await Birthday._birthday_update(self.cog, self.interaction, file)
         self.assertIs(self.cog.birthdays, original)
         self.cog.save_birthdays.assert_not_called()
 
@@ -58,7 +58,7 @@ class BirthdayFixTests(unittest.IsolatedAsyncioTestCase):
         file.read = AsyncMock(return_value=b'[{"character_id":"2","month":2,"day":29}]')
         original = self.cog.birthdays
         self.cog.save_birthdays = MagicMock(side_effect=OSError('disk failure'))
-        await Birthday.birthday_update.callback(self.cog, self.interaction, file)
+        await Birthday._birthday_update(self.cog, self.interaction, file)
         self.assertIs(self.cog.birthdays, original)
 
     def test_catch_up_after_scheduled_minute(self):
@@ -67,7 +67,7 @@ class BirthdayFixTests(unittest.IsolatedAsyncioTestCase):
 
     def test_management_default_permissions(self):
         for cog, prefix in [(Birthday, 'birthday'), (Quotes, 'quote')]:
-            for suffix in ['update', 'toggle', 'schedule']:
+            for suffix in ['admin']:
                 command = getattr(cog, prefix + '_' + suffix)
                 self.assertTrue(command.guild_only)
                 self.assertTrue(command.default_permissions.administrator)
@@ -97,7 +97,7 @@ class BirthdayTests(unittest.IsolatedAsyncioTestCase):
         original = self.cog.birthdays
         file = MagicMock(filename='birthdays.json')
         file.read = AsyncMock(return_value=json.dumps([original[0], original[0]]).encode())
-        await Birthday.birthday_update.callback(self.cog, self.interaction, file)
+        await Birthday._birthday_update(self.cog, self.interaction, file)
         self.assertIs(self.cog.birthdays, original)
         self.cog.save_birthdays.assert_not_called()
 
@@ -134,7 +134,7 @@ class CsvImportTests(unittest.IsolatedAsyncioTestCase):
         interaction.followup = AsyncMock()
         file = MagicMock(filename="birthdays.csv")
         file.read = AsyncMock(return_value=b'character_id,name,month,day\n1,"A,B",2,29\n')
-        await Birthday.birthday_update.callback(cog, interaction, file)
+        await Birthday._birthday_update(cog, interaction, file)
         self.assertEqual(cog.birthdays[0]["name"], "A,B")
         cog.save_birthdays.assert_called_once()
 
@@ -149,6 +149,6 @@ class CsvImportTests(unittest.IsolatedAsyncioTestCase):
         interaction.followup = AsyncMock()
         file = MagicMock(filename="birthdays.csv")
         file.read = AsyncMock(return_value=b'character_id,name,month,day\n1,A,2,29\n2,B,2,31\n')
-        await Birthday.birthday_update.callback(cog, interaction, file)
+        await Birthday._birthday_update(cog, interaction, file)
         self.assertIs(cog.birthdays, original)
         cog.save_birthdays.assert_not_called()
