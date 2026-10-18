@@ -1,12 +1,12 @@
-# Project workflow
+# プロジェクトの開発手順
 
-Read INSTRUCTIONS.md for the project structure and conventions.
+このプロジェクトでは、変更のたびに以下を必ず実施する。
 
-For every change in this project:
-- Split changes into small, coherent commits that can be reviewed independently.
-- Run the relevant tests before committing; keep credentials and live data out of tests and Git.
-- Push the working branch and create or update a pull request against the current main branch.
-- Review the final PR diff, fix actionable findings in separate commits, and rerun affected checks.
-- Report the PR link, commit and push status, test and CI results, and any remaining review findings.
-- Commit, push, PR creation, and PR review are authorized by the user's standing instruction; do not ask again.
-- Preserve unrelated local changes. Merging and production deployment require their own task authorization.
+- 最新のリモートと既存PRを確認し、`codex/` ブランチで作業する。
+- 他の作業の未コミット変更を混ぜず、機能・テスト・説明書など小さい論理単位でコミットする。
+- 適切なテストを実行し、変更をGitHubへプッシュしてPRを作成または更新する。
+- PRの差分をレビューし、修正が必要なら修正・再テスト・プッシュする。CIの結果を確認する。
+- PRのURL、コミット、テスト・CI・レビュー結果をユーザーへ報告する。
+- PRのマージはユーザーから依頼された場合に実施する。
+
+既存の詳細な設計・開発規約は INSTRUCTIONS.md を参照する。
