@@ -19,11 +19,11 @@ def normalize(row):
         if isinstance(value, bool) or not isinstance(value, (str, int)):
             raise ValueError("月日は整数で指定してください")
     month, day = int(row["month"]), int(row["day"])
-    datetime.date(2000, month, day)
+    datetime.date(2001, month, day)
     reported = row.get("reported", False)
     if not isinstance(reported, bool):
         raise ValueError("reportedは真偽値で指定してください")
-    return {**row, "character_id": cid, "name": name.strip(), "month": month, "day": day, "reported": reported}
+    return {"character_id": cid, "name": name.strip(), "month": month, "day": day, "reported": reported}
 
 
 def next_date(record, today):

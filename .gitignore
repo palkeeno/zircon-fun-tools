@@ -69,3 +69,5 @@ data/fonts/
 
 # Rejected-record reports
 data/*.rejected.json*
+# Administrator restore snapshots
+data/backups/

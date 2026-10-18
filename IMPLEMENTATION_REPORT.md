@@ -59,3 +59,7 @@ Each path has an executable regression test in test_features.py.
 - Version persistent character metadata by the source loaded for the deployment, so selector/schema changes refresh metadata before rendering under new code.
 
 - Store downloaded public fonts with mode 0644 and repair old private-mode cached downloads on preparation, without changing system/custom font permissions. POSIX CI verifies the final mode.
+
+## Integration review
+
+The current main now includes PRs #9, #10, #11 and #13. The integration retains private admin panels, export/restore and administrator-change snapshots, adds snapshot coverage to individual CRUD, preserves `/roll`, and rejects February 29 without storing birth years. Test imports bootstrap disposable storage before application modules. The combined suite passes 133 tests through both the isolated runner and direct unittest discovery; final head CI must be confirmed before merge.

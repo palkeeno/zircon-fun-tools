@@ -100,6 +100,6 @@ class SettingsPersistenceTests(unittest.IsolatedAsyncioTestCase):
         file = MagicMock(filename="data.json")
         file.read = AsyncMock(return_value=b'[{"speaker":"new","text":"new"}]')
         with self.assertRaises(OSError):
-            await Quotes.quote_update.callback(cog, interaction, file)
+            await Quotes._quote_update(cog, interaction, file)
         self.assertIs(cog.quotes, original)
         interaction.followup.send.assert_not_called()

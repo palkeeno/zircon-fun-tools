@@ -18,6 +18,8 @@ from discord.ext import commands, tasks
 
 import config
 import utils
+from cogs.admin_panel import AdminPanel
+from cogs.backups import persist_with_snapshot
 from quote_records import normalize, merge_records, parse_upload
 from cogs.pagination import Pagination
 
@@ -91,10 +93,14 @@ class Quotes(commands.Cog):
         payload = values if values is not None else self.settings
         config.set_runtime_section("quotes", payload)
 
-    async def _change_settings(self, values: Dict[str, Any]) -> None:
+    async def _change_settings(self, values: Dict[str, Any], *, backup: bool = True) -> None:
         async with self._data_lock:
             updated = {**self.settings, **values}
-            await asyncio.to_thread(config.set_runtime_section, "quotes", updated)
+            if backup:
+                await asyncio.to_thread(persist_with_snapshot, self, "quote", "settings",
+                                        lambda: config.set_runtime_section("quotes", updated))
+            else:
+                await asyncio.to_thread(config.set_runtime_section, "quotes", updated)
             self.settings = updated
 
     def _ensure_data_dir(self) -> None:
@@ -315,6 +321,15 @@ class Quotes(commands.Cog):
                    for key in ("speaker", "text", "id", "character_id"))]
         await self._show_records(interaction, matches, "🔍 名言検索結果")
 
+    @app_commands.guild_only()
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.command(name="quote_admin", description="名言の管理（自動投稿・スケジュール・データ更新）")
+    @app_commands.describe(file="全置換用のCSV/JSON（省略すると設定の操作パネルを表示）")
+    async def quote_admin(self, interaction: discord.Interaction, file: Optional[discord.Attachment] = None):
+        panel = AdminPanel(self, "quote", interaction.user.id, file)
+        await interaction.response.send_message(embed=panel.embed(), view=panel, ephemeral=True)
+
+
     async def _replace_records(self, records, *, full_replace=False):
         rejected = getattr(self, "_has_rejected_rows", False)
         if rejected and not full_replace:
@@ -323,17 +338,13 @@ class Quotes(commands.Cog):
         self.quotes = records
         self._has_rejected_rows = False
         try:
-            await asyncio.to_thread(self._save_data)
+            await asyncio.to_thread(persist_with_snapshot, self, "quote", "data", self._save_data, previous)
         except BaseException:
             self.quotes = previous
             self._has_rejected_rows = rejected
             raise
 
-    @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.command(name="quote_update", description="ファイルから名言データを一括更新します（全置換）")
-    @app_commands.describe(file="更新用ファイル（CSV/JSON）")
-    async def quote_update(self, interaction: discord.Interaction, file: discord.Attachment):
+    async def _quote_update(self, interaction: discord.Interaction, file: discord.Attachment):
         """CSV/JSONファイルから名言を一括更新（全置換）します。"""
 
         await interaction.response.defer(ephemeral=True)
@@ -401,35 +412,7 @@ class Quotes(commands.Cog):
             await self._replace_records([q for q in self.quotes if q['id'] != quote_id])
         await interaction.followup.send(f"名言 {quote_id} を削除しました。", ephemeral=True)
 
-    @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.command(name="quote_toggle", description="名言の定期投稿をON/OFFします")
-    @app_commands.describe(enabled="true で有効化、false で無効化")
-    async def quote_toggle(self, interaction: discord.Interaction, enabled: bool) -> None:
-        await self._change_settings({"enabled": bool(enabled)})
-        state = "有効" if enabled else "無効"
-        await interaction.response.send_message(f"名言の定期投稿を{state}にしました。", ephemeral=True)
 
-    @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.command(name="quote_schedule", description="名言の定期投稿スケジュールを設定します")
-    @app_commands.describe(
-        days="何日おきに投稿するか (1以上の整数)",
-        hour="投稿時刻 (0-23)",
-        minute="投稿時刻 (0-59)",
-    )
-    async def quote_schedule(self, interaction: discord.Interaction, days: int, hour: int, minute: int) -> None:
-        """名言の定期投稿スケジュールを設定するコマンド."""
-
-        if days < 1 or not (0 <= hour <= 23) or not (0 <= minute <= 59):
-            await interaction.response.send_message("入力値が不正です。日数は1以上、時刻は0-23/0-59で指定してください。", ephemeral=True)
-            return
-
-        await self._change_settings({"days": days, "hour": hour, "minute": minute, "last_posted_at": None})
-
-        await interaction.response.send_message(
-            f"投稿スケジュールを {days}日おき {hour:02d}:{minute:02d} に設定しました。", ephemeral=True
-        )
 
 
 async def setup(bot: commands.Bot) -> None:

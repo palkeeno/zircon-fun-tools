@@ -111,7 +111,7 @@ class QuoteCommandsTests(unittest.IsolatedAsyncioTestCase):
         previous, content = list(self.cog.quotes), Path(self.cog.data_path).read_bytes()
         upload = MagicMock(filename='quotes.json', size=100)
         upload.read = AsyncMock(return_value=b'[{"speaker":"A","text":"valid"},{"speaker":"","text":"bad"}]')
-        await Quotes.quote_update.callback(self.cog, self.item, upload)
+        await Quotes._quote_update(self.cog, self.item, upload)
         self.assertEqual(self.cog.quotes, previous)
         self.assertEqual(Path(self.cog.data_path).read_bytes(), content)
 
@@ -180,7 +180,7 @@ class QuoteCommandsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.cog.quotes), 1)
         upload = MagicMock(filename='quotes.json', size=60)
         upload.read = AsyncMock(return_value=b'[{"id":"valid","speaker":"A","text":"repaired"}]')
-        await Quotes.quote_update.callback(self.cog, self.item, upload)
+        await Quotes._quote_update(self.cog, self.item, upload)
         self.assertFalse(self.cog._has_rejected_rows)
         await Quotes.quote_add.callback(self.cog, self.item, 'B', 'new')
         self.assertEqual(len(self.cog.quotes), 2)
@@ -262,7 +262,7 @@ class BirthdayFeatureTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(path.read_bytes(), original)
             upload = MagicMock(filename='birthdays.json')
             upload.read = AsyncMock(return_value=b'[{"character_id":"123","name":"A","month":10,"day":9},{"character_id":"123","name":"A","month":10,"day":10}]')
-            await Birthday.birthday_update.callback(cog, item, upload)
+            await Birthday._birthday_update(cog, item, upload)
             self.assertEqual(path.read_bytes(), original)
             self.assertIn('重複', item.followup.send.call_args.args[0])
 
@@ -291,7 +291,7 @@ class BirthdayFeatureTests(unittest.IsolatedAsyncioTestCase):
             item = interaction()
             upload = MagicMock(filename='birthdays.json')
             upload.read = AsyncMock(return_value=b'[{"character_id":"old","name":"Old","month":10,"day":9},{"character_id":"new","name":"New","month":10,"day":9}]')
-            await Birthday.birthday_update.callback(cog, item, upload)
+            await Birthday._birthday_update(cog, item, upload)
             self.assertTrue(cog.birthdays[0]['reported'])
             cog._announce_zircon_birthday = AsyncMock(return_value=True)
             with patch('cogs.birthday.datetime.datetime') as clock, patch('config.get_birthday_channel_id', return_value=123):
@@ -350,7 +350,7 @@ class BirthdayFeatureTests(unittest.IsolatedAsyncioTestCase):
             path = Path(directory) / 'birthdays.json'
             cog = Birthday(MagicMock(), str(path))
             item = interaction()
-            await Birthday.birthday_add.callback(cog, item, '123', 'A', 2, 29)
+            await Birthday.birthday_add.callback(cog, item, '123', 'A', 2, 28)
             await Birthday.birthday_edit.callback(cog, item, '123', name='B', month=3, day=1)
             self.assertEqual(cog.birthdays[0]['name'], 'B')
             await Birthday.birthday_delete.callback(cog, item, '123')
