@@ -14,6 +14,7 @@ import os
 import config
 import utils
 from cogs.admin_panel import AdminPanel
+from cogs.backups import persist_with_snapshot
 
 import csv
 import io
@@ -141,10 +142,14 @@ class Birthday(commands.Cog):
     def _persist_settings(self) -> None:
         config.set_runtime_section("birthday", self.settings)
 
-    async def _change_settings(self, values: Dict[str, Any]) -> None:
+    async def _change_settings(self, values: Dict[str, Any], *, backup: bool = True) -> None:
         async with self._data_lock:
             updated = {**self.settings, **values}
-            await asyncio.to_thread(config.set_runtime_section, "birthday", updated)
+            if backup:
+                await asyncio.to_thread(persist_with_snapshot, self, "birthday", "settings",
+                                        lambda: config.set_runtime_section("birthday", updated))
+            else:
+                await asyncio.to_thread(config.set_runtime_section, "birthday", updated)
             self.settings = updated
 
     def _refresh_daily_flags(self, now: datetime.datetime) -> None:
@@ -192,7 +197,7 @@ class Birthday(commands.Cog):
 
             announced = await self._announce_today_birthdays(now)
             if announced:
-                await self._change_settings({"last_announced_date": today_str})
+                await self._change_settings({"last_announced_date": today_str}, backup=False)
         except Exception as e:
             logger.error(f"Error in birthday_task: {e}")
             logger.error(traceback.format_exc())
@@ -472,7 +477,8 @@ class Birthday(commands.Cog):
                 previous = self.birthdays
                 self.birthdays = validated
                 try:
-                    await asyncio.to_thread(self.save_birthdays)
+                    await asyncio.to_thread(persist_with_snapshot, self, "birthday", "data",
+                                            self.save_birthdays, previous)
                 except Exception:
                     self.birthdays = previous
                     raise

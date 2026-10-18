@@ -1,6 +1,11 @@
 """Shared private controls for birthday and quote management."""
 
 import logging
+import asyncio
+import io
+import json
+
+from cogs.backups import payload, snapshot_path, restore_snapshot, SnapshotChangedError
 
 import discord
 
@@ -81,6 +86,89 @@ class AdminPanel(discord.ui.View):
             "添付ファイルの内容で登録データをすべて置き換えます。更新しますか？",
             view=ReplaceConfirmation(self), ephemeral=True,
         )
+
+
+    async def download(self, interaction, kind):
+        await interaction.response.defer(ephemeral=True)
+        async with self.cog._data_lock:
+            data = payload(self.cog, self.feature, kind)
+        content = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+        await interaction.followup.send(
+            "現在のデータです。設定ファイルにはBotトークンや環境変数を含みません。",
+            file=discord.File(io.BytesIO(content), filename=f"{self.feature}-{kind}.json"),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="データをダウンロード", style=discord.ButtonStyle.secondary, row=1)
+    async def export_data(self, interaction, button):
+        await self.download(interaction, "data")
+
+    @discord.ui.button(label="設定をダウンロード", style=discord.ButtonStyle.secondary, row=1)
+    async def export_settings(self, interaction, button):
+        await self.download(interaction, "settings")
+
+    async def ask_restore(self, interaction, kind):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            async with self.cog._data_lock:
+                expected = await asyncio.to_thread(snapshot_path(self.cog, self.feature, kind).read_bytes)
+        except FileNotFoundError:
+            await interaction.followup.send("復元できるバックアップがありません。次回の管理操作から自動保存されます。", ephemeral=True)
+            return
+        label = "データ更新" if kind == "data" else "設定変更"
+        await interaction.followup.send(
+            f"直前の{label}前の状態に戻します。復元しますか？",
+            view=RestoreConfirmation(self, kind, expected), ephemeral=True,
+        )
+
+    @discord.ui.button(label="データを復元", style=discord.ButtonStyle.danger, row=2)
+    async def rollback_data(self, interaction, button):
+        await self.ask_restore(interaction, "data")
+
+    @discord.ui.button(label="設定を復元", style=discord.ButtonStyle.danger, row=2)
+    async def rollback_settings(self, interaction, button):
+        await self.ask_restore(interaction, "settings")
+
+
+class RestoreConfirmation(discord.ui.View):
+    def __init__(self, panel, kind, expected=None):
+        super().__init__(timeout=60)
+        self.panel = panel
+        self.kind = kind
+        self.expected = expected
+        self.used = False
+
+    async def interaction_check(self, interaction):
+        if self.used or self.panel.is_finished():
+            await interaction.response.send_message("この確認は終了しました。コマンドを再実行してください。", ephemeral=True)
+            return False
+        return await self.panel.interaction_check(interaction)
+
+    async def on_error(self, interaction, error, item):
+        logger.error("復元に失敗しました", exc_info=error)
+        await report_error(interaction)
+
+    @discord.ui.button(label="復元を実行", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction, button):
+        self.used = True
+        self.panel.busy = True
+        self.stop()
+        try:
+            await interaction.response.defer(ephemeral=True)
+            try:
+                await restore_snapshot(self.panel.cog, self.panel.feature, self.kind, self.expected)
+            except SnapshotChangedError:
+                await interaction.edit_original_response(content="別の管理操作でバックアップが変わりました。管理パネルから復元を選び直してください。", view=None)
+                return
+            await interaction.edit_original_response(content="更新前の状態へ復元しました。管理パネルを開き直すと最新の状態を確認できます。", view=None)
+        finally:
+            self.panel.busy = False
+
+    @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction, button):
+        self.used = True
+        self.stop()
+        await interaction.response.edit_message(content="復元をキャンセルしました。", view=None)
 
 
 class ScheduleModal(discord.ui.Modal):
