@@ -1,10 +1,12 @@
-# Development workflow
+# プロジェクトの開発手順
 
-For every change in this project:
+このプロジェクトでは、変更のたびに以下を必ず実施する。
 
-- Split work into small, coherent commits that can be reviewed independently.
-- Run checks appropriate to each change, then commit and push to a `codex/` branch.
-- Create or update a pull request and review its final diff. Fix actionable findings and report validation and review results.
-- Preserve unrelated local changes. Do not merge or deploy unless the user requests it.
+- 最新のリモートと既存PRを確認し、`codex/` ブランチで作業する。
+- 他の作業の未コミット変更を混ぜず、機能・テスト・説明書など小さい論理単位でコミットする。
+- 適切なテストを実行し、変更をGitHubへプッシュしてPRを作成または更新する。
+- PRの差分をレビューし、修正が必要なら修正・再テスト・プッシュする。CIの結果を確認する。
+- PRのURL、コミット、テスト・CI・レビュー結果をユーザーへ報告する。
+- PRのマージはユーザーから依頼された場合に実施する。
 
-このプロジェクトでは、小さな変更単位でコミット・プッシュし、PR作成とレビューまで毎回実施してください。
+既存の詳細な設計・開発規約は INSTRUCTIONS.md を参照する。
