@@ -62,4 +62,6 @@ Each path has an executable regression test in test_features.py.
 
 ## Integration review
 
-The current main now includes PRs #9, #10, #11 and #13. The integration retains private admin panels, export/restore and administrator-change snapshots, adds snapshot coverage to individual CRUD, preserves `/roll`, and rejects February 29 without storing birth years. Test imports bootstrap disposable storage before application modules. The combined suite passes 133 tests through both the isolated runner and direct unittest discovery; final head CI must be confirmed before merge.
+The current main now includes PRs #9, #10, #11 and #13. The integration retains private admin panels, export/restore and administrator-change snapshots, adds snapshot coverage to individual CRUD, preserves `/roll`, and rejects February 29 without storing birth years. Test imports bootstrap disposable storage before application modules. The combined suite passes 139 tests through both the isolated runner and direct unittest discovery; final head CI must be confirmed before merge.
+
+Restore validation also uses the current record rules. Integration regressions exercise individual add/edit/delete followed by restoration, stable quote IDs/creation history, custom birthday data paths, rejected-row guard recovery and failure rollback, and year/leap-day rejection. Backup snapshots stay beside the feature data.

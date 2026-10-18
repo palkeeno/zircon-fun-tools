@@ -18,7 +18,7 @@ class BackupTests(unittest.IsolatedAsyncioTestCase):
     async def test_restart_restore_and_failed_write(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'quotes.json'
-            cog = SimpleNamespace(data_path=str(path), quotes=[{'text': '以前の名言'}], settings={'hour': 9}, _data_lock=asyncio.Lock())
+            cog = SimpleNamespace(data_path=str(path), quotes=[{'speaker': 'A', 'text': '以前の名言', 'id': 'old', 'character_id': None}], settings={'hour': 9}, _data_lock=asyncio.Lock())
             cog._save_data = lambda: utils.atomic_write_json(path, {'quotes': cog.quotes})
             save_snapshot(cog, 'quote', 'data')
             cog.quotes = [{'text': '更新後'}]
@@ -28,7 +28,7 @@ class BackupTests(unittest.IsolatedAsyncioTestCase):
             restored = SimpleNamespace(**vars(cog))
             restored._save_data = lambda: utils.atomic_write_json(path, {'quotes': restored.quotes})
             await restore_snapshot(restored, 'quote', 'data')
-            self.assertEqual(restored.quotes, [{'text': '以前の名言'}])
+            self.assertEqual(restored.quotes, [{'speaker': 'A', 'text': '以前の名言', 'id': 'old', 'character_id': None}])
             self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['quotes'], restored.quotes)
             restored.quotes = [{'text': '現在'}]
             with patch.object(restored, '_save_data', side_effect=OSError('disk')):
@@ -119,7 +119,7 @@ class BackupTests(unittest.IsolatedAsyncioTestCase):
             cog.data_path = str(Path(directory) / "quotes.json")
             cog._data_lock = asyncio.Lock()
             cog.tz = utils.get_timezone()
-            cog.quotes = [{"speaker": "old", "text": "old", "id": "retained"}]
+            cog.quotes = [{"speaker": "old", "text": "old", "id": "retained", "character_id": None}]
             old = list(cog.quotes)
             interaction = MagicMock()
             interaction.user.id = 123

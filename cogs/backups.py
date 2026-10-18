@@ -1,8 +1,8 @@
 """Persistent snapshots of the last administrator change (separate from .bak)."""
 import asyncio
 import copy
-import datetime
 import json
+import uuid
 from pathlib import Path
 
 import config
@@ -10,7 +10,8 @@ import utils
 
 
 def snapshot_path(cog, feature, kind):
-    directory = Path(getattr(cog, "data_path", Path(config._DATA_DIR) / "quotes.json")).parent if feature == "quote" else Path(config._DATA_DIR)
+    data_path = getattr(cog, "data_path", None)
+    directory = Path(data_path).parent if isinstance(data_path, (str, Path)) else Path(config._DATA_DIR)
     return directory / "backups" / f"{feature}-{kind}.json"
 
 
@@ -64,21 +65,39 @@ async def restore_snapshot(cog, feature, kind, expected=None):
             if not isinstance(restored, list) or any(not isinstance(row, dict) for row in restored):
                 raise ValueError("Invalid data backup")
             if feature == "birthday":
-                checked = []
+                from birthday_records import normalize
+                restored = [normalize(row) for row in restored]
+                dates = {}
                 for row in restored:
-                    month, day = row.get("month"), row.get("day")
-                    if any(isinstance(value, bool) or not isinstance(value, int) for value in (month, day)):
-                        raise ValueError("バックアップの月日が不正です")
-                    datetime.date(2001, month, day)
-                    record = dict(row)
-                    record.pop("year", None)
-                    checked.append(record)
+                    cid, date = row["character_id"], (row["month"], row["day"])
+                    if cid in dates and dates[cid] != date:
+                        raise ValueError("バックアップのキャラクターIDに異なる誕生日があります")
+                    dates[cid] = date
+            else:
+                from quote_records import normalize
+                checked, seen, ordinals = [], set(), {}
+                for row in restored:
+                    item = normalize(row)
+                    identity = {key: item[key] for key in ("speaker", "text", "character_id")}
+                    content_key = json.dumps(identity, ensure_ascii=False, sort_keys=True)
+                    ordinal = ordinals.get(content_key, 0) + 1
+                    item["id"] = item["id"] or str(uuid.uuid5(uuid.NAMESPACE_URL, f"zft-quote:{ordinal}:" + content_key))
+                    if item["id"] in seen:
+                        raise ValueError("バックアップの名言IDが重複しています")
+                    seen.add(item["id"])
+                    ordinals[content_key] = ordinal
+                    checked.append(item)
                 restored = checked
             attribute = "birthdays" if feature == "birthday" else "quotes"
             previous = getattr(cog, attribute)
+            rejected = getattr(cog, "_has_rejected_rows", False)
             setattr(cog, attribute, restored)
+            if feature == "quote":
+                cog._has_rejected_rows = False
             try:
                 await asyncio.to_thread(cog.save_birthdays if feature == "birthday" else cog._save_data)
             except Exception:
                 setattr(cog, attribute, previous)
+                if feature == "quote":
+                    cog._has_rejected_rows = rejected
                 raise
