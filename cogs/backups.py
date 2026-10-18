@@ -1,6 +1,7 @@
 """Persistent snapshots of the last administrator change (separate from .bak)."""
 import asyncio
 import copy
+import datetime
 import json
 from pathlib import Path
 
@@ -62,6 +63,17 @@ async def restore_snapshot(cog, feature, kind, expected=None):
         else:
             if not isinstance(restored, list) or any(not isinstance(row, dict) for row in restored):
                 raise ValueError("Invalid data backup")
+            if feature == "birthday":
+                checked = []
+                for row in restored:
+                    month, day = row.get("month"), row.get("day")
+                    if any(isinstance(value, bool) or not isinstance(value, int) for value in (month, day)):
+                        raise ValueError("バックアップの月日が不正です")
+                    datetime.date(2001, month, day)
+                    record = dict(row)
+                    record.pop("year", None)
+                    checked.append(record)
+                restored = checked
             attribute = "birthdays" if feature == "birthday" else "quotes"
             previous = getattr(cog, attribute)
             setattr(cog, attribute, restored)

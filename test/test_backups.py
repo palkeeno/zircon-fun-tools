@@ -131,3 +131,21 @@ class BackupTests(unittest.IsolatedAsyncioTestCase):
             await restore_snapshot(cog, "quote", "data")
             self.assertEqual(cog.quotes, old)
             self.assertEqual(json.loads(Path(cog.data_path).read_text())["quotes"], old)
+
+    async def test_birthday_restore_rejects_leap_day_without_mutation(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "_DATA_DIR", directory):
+            original = [dict(character_id="1", month=2, day=28)]
+            cog = SimpleNamespace(birthdays=original, _data_lock=asyncio.Lock(), save_birthdays=MagicMock())
+            utils.atomic_write_json(snapshot_path(cog, "birthday", "data"), [dict(character_id="1", month=2, day=29)])
+            with self.assertRaises(ValueError):
+                await restore_snapshot(cog, "birthday", "data")
+            self.assertIs(cog.birthdays, original)
+            cog.save_birthdays.assert_not_called()
+
+    async def test_birthday_restore_does_not_store_year(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "_DATA_DIR", directory):
+            cog = SimpleNamespace(birthdays=[], _data_lock=asyncio.Lock(), save_birthdays=MagicMock())
+            utils.atomic_write_json(snapshot_path(cog, "birthday", "data"), [dict(character_id="1", month=2, day=28, year=2000)])
+            await restore_snapshot(cog, "birthday", "data")
+            self.assertNotIn("year", cog.birthdays[0])
+            cog.save_birthdays.assert_called_once()
