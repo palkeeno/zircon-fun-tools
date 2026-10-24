@@ -6,6 +6,7 @@ import time
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from discord.state import ConnectionState
 from cogs.help import Help
 from cogs.tarot import ChoiceModal, Tarot, TarotView, card_embed
 from cogs.tarot_cards import CARDS, POSITIONS
@@ -240,6 +241,43 @@ class ReadingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((panel.a, panel.b, panel.phase), ("", "", "input"))
         await modal.on_submit(interaction())
         self.assertEqual((panel.a, panel.b, panel.phase), ("A", "B", "confirm"))
+
+    async def test_discord_store_releases_previous_generations_and_finished_views(self):
+        # Exercise the real library store: rebuilding children otherwise leaks
+        # old custom-ID handlers, retaining questions/results after completion.
+        state = ConnectionState(dispatch=MagicMock(), handlers={}, hooks={}, http=MagicMock())
+        panel = self.panel("three")
+        state.store_view(panel, 123)
+        for slot in (0, 1, 2):
+            item = interaction()
+            item._state = state
+            item.message.id = 123
+
+            async def deliver(**kwargs):
+                if kwargs["view"].children:
+                    state.store_view(kwargs["view"], 123)
+
+            item.response.edit_message.side_effect = deliver
+            await panel.act(item, "pick", panel.revision, slot)
+            self.assertLessEqual(len(state._view_store._views.get(123, {})), 23)
+        self.assertNotIn(123, state._view_store._views)
+        panel = self.panel("one")
+        state.store_view(panel, 456)
+        await panel.on_timeout()
+        self.assertNotIn(456, state._view_store._views)
+
+    async def test_failed_update_restores_real_discord_dispatch_registration(self):
+        state = ConnectionState(dispatch=MagicMock(), handlers={}, hooks={}, http=MagicMock())
+        panel = self.panel()
+        state.store_view(panel, 123)
+        item = interaction()
+        item._state = state
+        item.message.id = 123
+        item.response.edit_message.side_effect = RuntimeError("Discord update rejected")
+        with self.assertRaises(RuntimeError):
+            await panel.act(item, "pick", panel.revision, 0)
+        self.assertEqual(len(state._view_store._views[123]), 23)
+        self.assertEqual(panel.selected, [])
 
     async def test_payload_limits_with_maximum_input_and_markdown(self):
         panel = self.panel("choice", "all", private=True)

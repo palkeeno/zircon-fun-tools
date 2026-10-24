@@ -82,7 +82,7 @@ class TarotView(discord.ui.View):
         self.deadline = time.monotonic() + TIMEOUT
 
     @asynccontextmanager
-    async def transaction(self):
+    async def transaction(self, interaction):
         """Keep the visible screen usable if Discord rejects an update."""
         async with self.lock:
             snapshot = {name: getattr(self, name) for name in
@@ -94,6 +94,8 @@ class TarotView(discord.ui.View):
                 for name, value in snapshot.items():
                     setattr(self, name, value)
                 self.refresh()
+                if interaction.message is not None:
+                    interaction._state.store_view(self, interaction.message.id)
                 raise
 
     def refresh(self):
@@ -181,6 +183,9 @@ class TarotView(discord.ui.View):
         return True
 
     async def update(self, interaction: discord.Interaction):
+        # discord.py's store adds new custom IDs without removing old ones.
+        # Detach while the old children still exist, before rebuilding them.
+        interaction._state._view_store.remove_view(self)
         self.revision += 1
         self.touch()
         self.refresh()
@@ -190,7 +195,7 @@ class TarotView(discord.ui.View):
 
     async def act(self, interaction: discord.Interaction, action: str, revision: int, slot=None):
         """Serialize actions, including clicks delivered before a screen update."""
-        async with self.transaction():
+        async with self.transaction(interaction):
             if not await self.valid(interaction, revision):
                 return
             if action == "input" and self.phase in {"input", "confirm"}:
@@ -223,6 +228,7 @@ class TarotView(discord.ui.View):
         async with self.lock:
             if self.phase in {"done", "cancelled"}:
                 return
+            self.stop()
             self.phase = "expired"
             self.revision += 1
             self.refresh()
@@ -251,7 +257,7 @@ class ChoiceModal(discord.ui.Modal):
             self.add_item(field)
 
     async def on_submit(self, interaction: discord.Interaction):
-        async with self.panel.transaction():
+        async with self.panel.transaction(interaction):
             if not await self.panel.valid(interaction, self.revision):
                 return
             a, b = self.a.value.strip(), self.b.value.strip()
