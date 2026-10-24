@@ -484,6 +484,11 @@ pip freeze > requirements.txt
 
 ## 運用・検証の現行規約
 
+タロットは `cogs/tarot.py` の `/tarot` グループと `cogs/tarot_cards.py` の大アルカナ定義で構成する。
+カード名・正逆位置の意味・スプレッド位置は固定データとし、自動で相談の結論を生成しない。
+セッションはメモリ内のみ。伏せ札の配置を最初に固定し、操作は実行者と画面世代を検証して直列化する。
+`/help` はコマンドグループの末端サブコマンドも列挙する。
+
 Python 3.10以上。テストはtestパッケージのbootstrapで認証設定と保存先を一時値へ分離する。新しいテストもアプリimportより前に`import test`を置く。main/configのimportでBotを起動・認証検証・フォントインストールしない。データ検証はquote_records.py / birthday_records.py、コマンド共通エラー応答はcommand_errors.pyへ集約する。新しいCogを加えたらtest/run_tests.pyのコピー対象も確認する。
 
 本番監視はsystemdのみ。フォント準備はセットアップ時、ポスターは上限付きキューと永続キャッシュを使う。変更確認はpython test/run_tests.py、直接unittest実行、Windows/Ubuntu CIを利用する。
