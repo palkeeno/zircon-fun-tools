@@ -28,7 +28,7 @@ class FunToolsBot(commands.Bot):
         self.initial_extensions = [
             'cogs.birthday',
             'cogs.oracle',
-            'cogs.lottery',
+            'cogs.events',
             'cogs.roll',
             'cogs.poster',
             'cogs.quotes',
