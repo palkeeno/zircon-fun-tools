@@ -174,7 +174,7 @@ class Events(commands.Cog):
             role = member.guild.get_role(event["role"])
             if event["role"] and role is None:
                 raise ValueError("参加者ロールが削除されています。運営者へ連絡してください。")
-            if role:
+            if role and role not in member.roles:
                 await member.add_roles(role, atomic=True, reason="イベント参加")
 
     async def leave(self, key, member):
@@ -228,8 +228,13 @@ class Events(commands.Cog):
                 await self.cleanup(key, event, guild, channel)
 
     async def announce_random(self, key, event, channel, uid, i):
-        await channel.send(f"🎲 {i + 1}人目の発表まで…")
-        await asyncio.sleep(event.get("interval", 5))
+        countdown = await channel.send(f"🎲 {i + 1}人目の当選者を発表します！")
+        interval = event.get("interval", 5)
+        if interval > 5:
+            await asyncio.sleep(interval - 5)
+        for seconds in range(5, 0, -1):
+            await countdown.edit(content=f"🎲 {i + 1}人目の発表まで… {seconds}")
+            await asyncio.sleep(1)
         await channel.send(f"🎊 {i + 1}人目の当選者：<@{uid}>",
                            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
         event["index"] += 1
