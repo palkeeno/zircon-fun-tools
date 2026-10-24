@@ -6,8 +6,6 @@ import time
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import discord
-
 from cogs.help import Help
 from cogs.tarot import ChoiceModal, Tarot, TarotView, card_embed
 from cogs.tarot_cards import CARDS, POSITIONS
@@ -215,6 +213,33 @@ class ReadingTests(unittest.IsolatedAsyncioTestCase):
         await self.click(panel, "pick", 2)
         await panel.on_timeout()
         self.assertEqual(len(panel.embeds()), 1)
+
+    async def test_failed_draw_update_can_retry_same_slot_without_changing_deck(self):
+        panel = self.panel()
+        deck, revision = panel.deck, panel.revision
+        item = interaction()
+        item.response.edit_message.side_effect = RuntimeError("Discord update rejected")
+        with self.assertRaises(RuntimeError):
+            await panel.act(item, "pick", revision, 17)
+        self.assertEqual(panel.selected, [])
+        self.assertEqual(panel.phase, "reading")
+        self.assertEqual(panel.revision, revision)
+        self.assertFalse(panel.is_finished())
+        await self.click(panel, "pick", 17)
+        self.assertEqual(panel.selected, [17])
+        self.assertEqual(panel.deck, deck)
+
+    async def test_failed_modal_update_keeps_original_input_and_allows_resubmit(self):
+        panel = self.panel("choice")
+        modal = ChoiceModal(panel)
+        modal.a._value, modal.b._value = "A", "B"
+        item = interaction()
+        item.response.edit_message.side_effect = RuntimeError("Discord update rejected")
+        with self.assertRaises(RuntimeError):
+            await modal.on_submit(item)
+        self.assertEqual((panel.a, panel.b, panel.phase), ("", "", "input"))
+        await modal.on_submit(interaction())
+        self.assertEqual((panel.a, panel.b, panel.phase), ("A", "B", "confirm"))
 
     async def test_payload_limits_with_maximum_input_and_markdown(self):
         panel = self.panel("choice", "all", private=True)

@@ -1,6 +1,7 @@
 """Interactive major-arcana readings without automatic interpretation."""
 
 import asyncio
+from contextlib import asynccontextmanager
 import logging
 import random
 import time
@@ -79,6 +80,21 @@ class TarotView(discord.ui.View):
 
     def touch(self):
         self.deadline = time.monotonic() + TIMEOUT
+
+    @asynccontextmanager
+    async def transaction(self):
+        """Keep the visible screen usable if Discord rejects an update."""
+        async with self.lock:
+            snapshot = {name: getattr(self, name) for name in
+                        ("phase", "question", "a", "b", "revision", "deadline")}
+            snapshot["selected"] = self.selected.copy()
+            try:
+                yield
+            except Exception:
+                for name, value in snapshot.items():
+                    setattr(self, name, value)
+                self.refresh()
+                raise
 
     def refresh(self):
         """Rebuild controls; stale components cannot advance a newer screen."""
@@ -174,7 +190,7 @@ class TarotView(discord.ui.View):
 
     async def act(self, interaction: discord.Interaction, action: str, revision: int, slot=None):
         """Serialize actions, including clicks delivered before a screen update."""
-        async with self.lock:
+        async with self.transaction():
             if not await self.valid(interaction, revision):
                 return
             if action == "input" and self.phase in {"input", "confirm"}:
@@ -235,7 +251,7 @@ class ChoiceModal(discord.ui.Modal):
             self.add_item(field)
 
     async def on_submit(self, interaction: discord.Interaction):
-        async with self.panel.lock:
+        async with self.panel.transaction():
             if not await self.panel.valid(interaction, self.revision):
                 return
             a, b = self.a.value.strip(), self.b.value.strip()
