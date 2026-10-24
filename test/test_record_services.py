@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-import uuid
 from unittest.mock import MagicMock
 
 from cogs.backups import restore_snapshot, save_snapshot
@@ -16,14 +15,13 @@ from quote_records import normalize_records
 class QuoteRecordServices(unittest.IsolatedAsyncioTestCase):
     def test_legacy_id_and_order_survive_rejected_and_duplicate_rows(self):
         row = {"speaker": " A ", "text": " hello "}
-        content = json.dumps({"speaker": "A", "text": "hello", "character_id": None},
-                             ensure_ascii=False, sort_keys=True)
-        first_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "zft-quote:1:" + content))
+        # Fixed legacy fixtures catch changes to the UUID namespace or identity encoding.
+        first_id = "1c0a5f5d-95ed-5ed6-8d60-9b4f346e2f8c"
         rows = [row, {**row, "id": first_id}, {"text": "invalid"}, row]
         before = copy.deepcopy(rows)
         valid, rejected = normalize_records(rows, strict=False)
-        self.assertEqual([q["id"] for q in valid], [first_id, str(uuid.uuid5(
-            uuid.NAMESPACE_URL, "zft-quote:2:" + content))])
+        self.assertEqual([q["id"] for q in valid],
+                         [first_id, "28e70332-09a1-5664-a5d2-949cb5a78619"])
         self.assertEqual([r["row"] for r in rejected], [2, 3])
         self.assertEqual(rows, before)
         self.assertEqual(normalize_records(valid), (valid, []))
