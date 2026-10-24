@@ -4,7 +4,6 @@ import copy
 import json
 import io
 import os
-import random
 import uuid
 
 import discord
@@ -15,29 +14,11 @@ import config
 import utils
 from command_errors import send_error
 from cogs.role_tools import validate_role
+from event_selection import METHODS, select_winners
 
 
 CONDITIONS = {"message": "チャンネルで発言", "keyword": "指定の言葉", "button": "参加ボタン",
               "reaction": "リアクション", "attachment": "画像・ファイル", "form": "フォーム"}
-METHODS = {"random": "順次ランダム抽選", "majority": "多数派が勝利", "minority": "少数派が勝利"}
-
-
-def select_winners(event):
-    """0票を除外。同票の選択肢はすべて勝利。"""
-    people = list(event["entries"])
-    if event["method"] == "random":
-        if len(people) < event["count"]:
-            raise ValueError("参加人数が抽選人数に足りません。受付を継続します。")
-        return random.sample(people, event["count"])
-    buckets = {}
-    for uid, entry in event["entries"].items():
-        vote = entry.get("vote")
-        if vote is not None:
-            buckets.setdefault(vote, []).append(uid)
-    if not buckets:
-        raise ValueError("投票がありません。受付を継続します。")
-    target = (max if event["method"] == "majority" else min)(map(len, buckets.values()))
-    return [uid for group in buckets.values() if len(group) == target for uid in group]
 
 
 class EventView(discord.ui.View):
