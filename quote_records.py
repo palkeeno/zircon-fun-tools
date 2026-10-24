@@ -41,6 +41,34 @@ def normalize(row):
     return result
 
 
+def normalize_records(rows, *, strict=True):
+    """Normalize stored quotes with stable legacy IDs.
+
+    Loading can report rejected rows without overwriting the original file;
+    restoring uses strict mode so no partial backup is ever applied.
+    Only accepted rows advance the ordinal for identical normalized content.
+    """
+    valid, rejected, seen, ordinals = [], [], set(), {}
+    for number, row in enumerate(rows, 1):
+        try:
+            item = normalize(row)
+            identity = {key: item[key] for key in ("speaker", "text", "character_id")}
+            content_key = json.dumps(identity, ensure_ascii=False, sort_keys=True)
+            ordinal = ordinals.get(content_key, 0) + 1
+            item["id"] = item["id"] or str(uuid.uuid5(
+                uuid.NAMESPACE_URL, f"zft-quote:{ordinal}:" + content_key))
+            if item["id"] in seen:
+                raise ValueError("duplicate ID")
+            seen.add(item["id"])
+            ordinals[content_key] = ordinal
+            valid.append(item)
+        except ValueError as exc:
+            if strict:
+                raise ValueError(f"{number}行目: {exc}") from exc
+            rejected.append({"row": number, "error": str(exc), "record": row})
+    return valid, rejected
+
+
 def signature(row):
     return tuple(row.get(key) for key in ("speaker", "text", "character_id"))
 
