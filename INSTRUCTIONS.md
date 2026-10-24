@@ -33,7 +33,7 @@ zircon-fun-tools/
 │   ├── __init__.py
 │   ├── birthday.py      # 誕生日管理機能
 │   ├── oracle.py        # 占い機能
-│   ├── lottery.py       # 抽選機能
+│   ├── events.py        # 受付・抽選・ロール回収
 │   ├── poster.py        # ポスター生成機能
 │   └── quotes.py        # 名言投稿機能
 ├── data/                # 永続化データ（自動生成）
@@ -70,7 +70,7 @@ zircon-fun-tools/
 
 - **birthday.py**: 誕生日の登録・検索・一覧表示・通知機能
 - **oracle.py**: 選択肢から1つをランダムに選ぶ占い機能
-- **lottery.py**: ロールメンバーからランダムに抽選
+- **events.py**: 参加受付・ランダム/投票抽選・ロール回収
 - **poster.py**: キャラクター情報から画像ポスターを生成
 - **quotes.py**: 名言の登録・検索・定期投稿機能
 
@@ -309,7 +309,7 @@ async def setup(bot: commands.Bot):
 self.initial_extensions = [
     'cogs.birthday',
     'cogs.oracle',
-    'cogs.lottery',
+    'cogs.events',
     'cogs.poster',
     'cogs.quotes',
     'cogs.new_feature',  # 追加
@@ -488,3 +488,6 @@ Python 3.10以上。テストはtestパッケージのbootstrapで認証設定�
 
 本番監視はsystemdのみ。フォント準備はセットアップ時、ポスターは上限付きキューと永続キャッシュを使う。変更確認はpython test/run_tests.py、直接unittest実行、Windows/Ubuntu CIを利用する。
 画像取得は `config.IMAGE_CACHE` を共有し、同期I/O・画像合成はワーカースレッドへ移します。JSON保存は `utils.atomic_write_json()` を使います。単一サーバー用のため、対象 `GUILD_ID` 未設定時は起動・同期を拒否します。管理コマンドは `default_permissions` による初期権限のみ設定し、運用上の許可はDiscord側で管理します。
+
+
+設計の選定理由と不要コードの整理結果は [ARCHITECTURE.md](ARCHITECTURE.md) を参照してください。

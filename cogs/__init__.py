@@ -4,14 +4,14 @@ Discordボットのコグ（機能拡張）モジュールを管理するパッ�
 
 from .birthday import Birthday
 from .oracle import Oracle
-from .lottery import Lottery
+from .events import Events
 from .poster import Poster
 from .quotes import Quotes
 
 __all__ = [
     'Birthday',
     'Oracle',
-    'Lottery',
+    'Events',
     'Poster',
     'Quotes'
 ] 

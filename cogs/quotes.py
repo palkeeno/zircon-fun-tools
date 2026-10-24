@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import io
 import json
 import logging
 import os
@@ -23,9 +22,6 @@ from quote_records import normalize_records, merge_records, parse_upload
 from cogs.pagination import Pagination
 
 logger = logging.getLogger(__name__)
-# 環境に依存しないパス構築
-_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
-_DATA_DIR = os.path.abspath(_DATA_DIR)
 _DEFAULT_DATA_PATH = os.path.join(config._DATA_DIR, "quotes.json")
 
 
@@ -55,29 +51,21 @@ class Quotes(commands.Cog):
         """Return default settings derived from config."""
         feature_settings = config.get_feature_settings("quotes")
         return {
-            "enabled": self._coerce_bool(feature_settings.get("default_enabled"), True),
-            "days": self._coerce_int(feature_settings.get("default_days"), 1, minimum=1),
-            "hour": self._coerce_int(feature_settings.get("default_hour"), 9, minimum=0, maximum=23),
-            "minute": self._coerce_int(feature_settings.get("default_minute"), 0, minimum=0, maximum=59),
+            "enabled": utils.coerce_bool(feature_settings.get("default_enabled"), True),
+            "days": utils.coerce_int(feature_settings.get("default_days"), 1, minimum=1),
+            "hour": utils.coerce_int(feature_settings.get("default_hour"), 9, minimum=0, maximum=23),
+            "minute": utils.coerce_int(feature_settings.get("default_minute"), 0, minimum=0, maximum=59),
             "last_posted_at": None,
             "last_posted_quote_id": None,
         }
 
-    @staticmethod
-    def _coerce_bool(value: Any, fallback: bool) -> bool:
-        return utils.coerce_bool(value, fallback)
-
-    @staticmethod
-    def _coerce_int(value: Any, fallback: int, *, minimum: int, maximum: Optional[int] = None) -> int:
-        return utils.coerce_int(value, fallback, minimum=minimum, maximum=maximum)
-
     def _normalize_settings(self, raw: Dict[str, Any]) -> Dict[str, Any]:
         defaults = self._default_settings
         return {
-            "enabled": self._coerce_bool(raw.get("enabled"), defaults["enabled"]),
-            "days": self._coerce_int(raw.get("days"), defaults["days"], minimum=1),
-            "hour": self._coerce_int(raw.get("hour"), defaults["hour"], minimum=0, maximum=23),
-            "minute": self._coerce_int(raw.get("minute"), defaults["minute"], minimum=0, maximum=59),
+            "enabled": utils.coerce_bool(raw.get("enabled"), defaults["enabled"]),
+            "days": utils.coerce_int(raw.get("days"), defaults["days"], minimum=1),
+            "hour": utils.coerce_int(raw.get("hour"), defaults["hour"], minimum=0, maximum=23),
+            "minute": utils.coerce_int(raw.get("minute"), defaults["minute"], minimum=0, maximum=59),
             "last_posted_at": raw.get("last_posted_at") if isinstance(raw.get("last_posted_at"), str) else None,
             "last_posted_quote_id": raw.get("last_posted_quote_id") if raw.get("last_posted_quote_id") else None,
         }

@@ -284,7 +284,7 @@ python main.py
 INFO - Logged in as YourBotName (ID: 123456789)
 INFO - cogs.birthday をロードしました
 INFO - cogs.oracle をロードしました
-INFO - cogs.lottery をロードしました
+INFO - cogs.events をロードしました
 INFO - cogs.poster をロードしました
 INFO - cogs.quotes をロードしました
 INFO - スラッシュコマンド同期完了: X個
@@ -323,7 +323,7 @@ zircon-fun-tools/
 │   ├── __init__.py
 │   ├── birthday.py      # 誕生日機能
 │   ├── oracle.py        # 占い機能
-│   ├── lottery.py       # 抽選機能
+│   ├── events.py        # 受付・抽選・ロール回収
 │   ├── poster.py        # ポスター生成機能
 │   └── quotes.py        # 名言投稿機能
 ├── data/                # データファイル（自動生成）
@@ -465,3 +465,6 @@ Mee6などによる同じロールの自動付与を停止してから利用し�
 別コマンド `/event_create` では6種類の参加条件から1種類と、ランダム・多数派・少数派の選出方式を指定可能。
 任意の必須ロールで参加資格を制限できます。`/event_manage` は進行中イベントの確認・再開用です。
 詳しい引数・同票ルール・復旧方法は USER_GUIDE.md「受付付き抽選・汎用イベント」を参照してください。
+
+
+設計の選定理由と不要コードの整理結果は [ARCHITECTURE.md](ARCHITECTURE.md) を参照してください。

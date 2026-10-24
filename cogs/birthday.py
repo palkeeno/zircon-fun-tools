@@ -25,70 +25,6 @@ from typing import Any, Dict, Optional, Tuple
 # ロギングの設定
 logger = logging.getLogger(__name__)
 
-class BirthdayPaginationView(discord.ui.View):
-    """誕生日一覧のページネーション用ビュー"""
-
-    def __init__(self, birthdays: list):
-        super().__init__(timeout=180)
-        self.birthdays = birthdays
-        self.current_page = 0
-        self.items_per_page = 8
-        self.max_pages = (len(birthdays) - 1) // self.items_per_page + 1
-
-        # ボタンの初期状態を更新
-        self.update_buttons()
-
-    def update_buttons(self):
-        """ボタンの有効/無効を更新"""
-        self.previous_button.disabled = self.current_page == 0
-        self.next_button.disabled = self.current_page >= self.max_pages - 1
-
-    def create_embed(self) -> discord.Embed:
-        """現在のページのEmbedを作成"""
-        embed = discord.Embed(
-            title="🎂 誕生日一覧",
-            description="登録されているZirconキャラクターの誕生日一覧です",
-            color=discord.Color.pink()
-        )
-
-        start_idx = self.current_page * self.items_per_page
-        end_idx = min(start_idx + self.items_per_page, len(self.birthdays))
-        page_items = self.birthdays[start_idx:end_idx]
-
-        # 1つのフィールドに8行のデータを記載
-        lines = []
-        for b in page_items:
-            char_id = b.get("character_id", "???")
-            name = b.get("name", "不明")
-            month = b.get("month", 0)
-            day = b.get("day", 0)
-            lines.append(f"{char_id}, {name} : birthday({month:02d}/{day:02d})")
-
-        embed.add_field(
-            name=f"ページ {self.current_page + 1}/{self.max_pages}",
-            value="\n".join(lines),
-            inline=False
-        )
-
-        embed.set_footer(text=f"全 {len(self.birthdays)} 件")
-        return embed
-
-    @discord.ui.button(label="◀ 前へ", style=discord.ButtonStyle.primary)
-    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """前のページへ"""
-        self.current_page = max(0, self.current_page - 1)
-        self.update_buttons()
-        embed = self.create_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-
-    @discord.ui.button(label="次へ ▶", style=discord.ButtonStyle.primary)
-    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """次のページへ"""
-        self.current_page = min(self.max_pages - 1, self.current_page + 1)
-        self.update_buttons()
-        embed = self.create_embed()
-        await interaction.response.edit_message(embed=embed, view=self)
-
 class Birthday(commands.Cog):
     """誕生日管理のコグ"""
 
@@ -117,25 +53,17 @@ class Birthday(commands.Cog):
         default_enabled = feature_settings.get("default_enabled", True)
         default_hour = feature_settings.get("default_hour", 9)
         return {
-            "enabled": self._coerce_bool(default_enabled, True),
-            "hour": self._clamp_int(default_hour, 0, 23, 9),
+            "enabled": utils.coerce_bool(default_enabled, True),
+            "hour": utils.coerce_int(default_hour, 9, minimum=0, maximum=23),
             "last_announced_date": None,
             "last_reset_date": None,
         }
 
-    @staticmethod
-    def _coerce_bool(value: Any, fallback: bool) -> bool:
-        return utils.coerce_bool(value, fallback)
-
-    @staticmethod
-    def _clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:
-        return utils.clamp_int(value, minimum, maximum, fallback)
-
     def _load_settings(self) -> None:
         stored = config.get_runtime_section("birthday")
         normalized = {
-            "enabled": self._coerce_bool(stored.get("enabled"), self.defaults["enabled"]),
-            "hour": self._clamp_int(stored.get("hour"), 0, 23, self.defaults["hour"]),
+            "enabled": utils.coerce_bool(stored.get("enabled"), self.defaults["enabled"]),
+            "hour": utils.coerce_int(stored.get("hour"), self.defaults["hour"], minimum=0, maximum=23),
             "last_announced_date": stored.get("last_announced_date") if isinstance(stored.get("last_announced_date"), str) else None,
             "last_reset_date": stored.get("last_reset_date") if isinstance(stored.get("last_reset_date"), str) else None,
         }
@@ -170,7 +98,7 @@ class Birthday(commands.Cog):
         self._persist_settings()
 
     def _is_scheduled_time(self, now: datetime.datetime) -> bool:
-        target_hour = self._clamp_int(self.settings.get("hour"), 0, 23, self.defaults["hour"])
+        target_hour = utils.coerce_int(self.settings.get("hour"), self.defaults["hour"], minimum=0, maximum=23)
         return now.hour >= target_hour
 
     @commands.Cog.listener()
@@ -314,11 +242,6 @@ class Birthday(commands.Cog):
     def cog_unload(self):
         self.birthday_task.cancel()
 
-    async def save_birthdays_async(self):
-        """誕生日データを非同期で保存します（ロック付き）。"""
-        async with self._data_lock:
-            await asyncio.to_thread(self.save_birthdays)
-
     @app_commands.command(name="birthday", description="誕生日を一覧・検索・今日・今月・次に来る順で表示します")
     @app_commands.choices(mode=[app_commands.Choice(name="一覧", value="all"),
         app_commands.Choice(name="今日", value="today"), app_commands.Choice(name="今月", value="month"),
@@ -336,70 +259,6 @@ class Birthday(commands.Cog):
             lambda b: (f"{b['name']} (#{b['character_id']})", f"{b['month']}月{b['day']}日"))
         await interaction.response.send_message(embed=view.embed(), view=view)
         view.message = await interaction.original_response()
-
-    async def _handle_search(self, interaction: discord.Interaction, query: str):
-        candidates = [b for b in self.birthdays
-                     if query in b.get("character_id", "") or query.lower() in b.get("name", "").lower()]
-
-        if not candidates:
-            await interaction.response.send_message(
-                f"`{query}` に一致するキャラクターの誕生日は登録されていません。",
-                ephemeral=True
-            )
-            return
-
-        if len(candidates) == 1:
-            result = candidates[0]
-            await self._show_birthday_detail(interaction, result)
-        else:
-            await self._show_birthday_list_embed(interaction, candidates, title=f"🔍 検索結果: {len(candidates)}件")
-
-    async def _show_birthday_detail(self, interaction: discord.Interaction, data: dict):
-        char_id = data.get("character_id", "???")
-        char_name = data.get("name", "不明")
-        month = data.get("month", 0)
-        day = data.get("day", 0)
-
-        embed = discord.Embed(title="🎂 誕生日情報", color=discord.Color.pink())
-        embed.add_field(name="キャラクターID", value=char_id, inline=True)
-        embed.add_field(name="名前", value=char_name, inline=True)
-        embed.add_field(name="誕生日", value=f"{month}月{day}日", inline=True)
-
-        await interaction.response.send_message(embed=embed)
-
-    async def _handle_list(self, interaction: discord.Interaction):
-        if not self.birthdays:
-            await interaction.response.send_message("登録されている誕生日はありません。", ephemeral=True)
-            return
-
-        sorted_birthdays = sorted(self.birthdays, key=lambda x: (x["month"], x["day"]))
-
-        if len(sorted_birthdays) > 8:
-            view = BirthdayPaginationView(sorted_birthdays)
-            embed = view.create_embed()
-            await interaction.response.send_message(embed=embed, view=view)
-        else:
-            await self._show_birthday_list_embed(interaction, sorted_birthdays)
-
-    async def _show_birthday_list_embed(self, interaction: discord.Interaction, data: list, title="🎂 誕生日一覧"):
-        embed = discord.Embed(title=title, color=discord.Color.pink())
-        lines = []
-        for b in data[:10]:
-            char_id = b.get("character_id", "???")
-            name = b.get("name", "不明")
-            month = b.get("month", 0)
-            day = b.get("day", 0)
-            lines.append(f"**{name}** (#{char_id}) - {month}月{day}日")
-
-        embed.add_field(name="キャラクター", value="\n".join(lines), inline=False)
-        if len(data) > 10:
-            embed.set_footer(text=f"※ 表示件数制限のため先頭10件のみ表示しています。")
-
-        if not interaction.response.is_done():
-            await interaction.response.send_message(embed=embed)
-        else:
-            await interaction.followup.send(embed=embed)
-
 
     async def _birthday_update(self, interaction: discord.Interaction, file: discord.Attachment):
         """
