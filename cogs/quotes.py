@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import io
 import json
 import logging
 import os
 import random
-import uuid
 from typing import Any, Dict, List, Optional
 
 import discord
@@ -20,13 +18,10 @@ import config
 import utils
 from cogs.admin_panel import AdminPanel
 from cogs.backups import persist_with_snapshot
-from quote_records import normalize, merge_records, parse_upload
+from quote_records import normalize_records, merge_records, parse_upload
 from cogs.pagination import Pagination
 
 logger = logging.getLogger(__name__)
-# 環境に依存しないパス構築
-_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
-_DATA_DIR = os.path.abspath(_DATA_DIR)
 _DEFAULT_DATA_PATH = os.path.join(config._DATA_DIR, "quotes.json")
 
 
@@ -56,29 +51,21 @@ class Quotes(commands.Cog):
         """Return default settings derived from config."""
         feature_settings = config.get_feature_settings("quotes")
         return {
-            "enabled": self._coerce_bool(feature_settings.get("default_enabled"), True),
-            "days": self._coerce_int(feature_settings.get("default_days"), 1, minimum=1),
-            "hour": self._coerce_int(feature_settings.get("default_hour"), 9, minimum=0, maximum=23),
-            "minute": self._coerce_int(feature_settings.get("default_minute"), 0, minimum=0, maximum=59),
+            "enabled": utils.coerce_bool(feature_settings.get("default_enabled"), True),
+            "days": utils.coerce_int(feature_settings.get("default_days"), 1, minimum=1),
+            "hour": utils.coerce_int(feature_settings.get("default_hour"), 9, minimum=0, maximum=23),
+            "minute": utils.coerce_int(feature_settings.get("default_minute"), 0, minimum=0, maximum=59),
             "last_posted_at": None,
             "last_posted_quote_id": None,
         }
 
-    @staticmethod
-    def _coerce_bool(value: Any, fallback: bool) -> bool:
-        return utils.coerce_bool(value, fallback)
-
-    @staticmethod
-    def _coerce_int(value: Any, fallback: int, *, minimum: int, maximum: Optional[int] = None) -> int:
-        return utils.coerce_int(value, fallback, minimum=minimum, maximum=maximum)
-
     def _normalize_settings(self, raw: Dict[str, Any]) -> Dict[str, Any]:
         defaults = self._default_settings
         return {
-            "enabled": self._coerce_bool(raw.get("enabled"), defaults["enabled"]),
-            "days": self._coerce_int(raw.get("days"), defaults["days"], minimum=1),
-            "hour": self._coerce_int(raw.get("hour"), defaults["hour"], minimum=0, maximum=23),
-            "minute": self._coerce_int(raw.get("minute"), defaults["minute"], minimum=0, maximum=59),
+            "enabled": utils.coerce_bool(raw.get("enabled"), defaults["enabled"]),
+            "days": utils.coerce_int(raw.get("days"), defaults["days"], minimum=1),
+            "hour": utils.coerce_int(raw.get("hour"), defaults["hour"], minimum=0, maximum=23),
+            "minute": utils.coerce_int(raw.get("minute"), defaults["minute"], minimum=0, maximum=59),
             "last_posted_at": raw.get("last_posted_at") if isinstance(raw.get("last_posted_at"), str) else None,
             "last_posted_quote_id": raw.get("last_posted_quote_id") if raw.get("last_posted_quote_id") else None,
         }
@@ -121,24 +108,7 @@ class Quotes(commands.Cog):
         rows = payload if isinstance(payload, list) else payload.get("quotes") if isinstance(payload, dict) else None
         if not isinstance(rows, list):
             raise ValueError("quotes.json must contain a quote list")
-        valid, rejected, seen, ordinals = [], [], set(), {}
-        for number, row in enumerate(rows, 1):
-            try:
-                quote = normalize(row)
-                identity = {key: quote[key] for key in ('speaker', 'text', 'character_id')}
-                content_key = json.dumps(identity, ensure_ascii=False, sort_keys=True)
-                ordinal = ordinals.get(content_key, 0) + 1
-                # Rejected rows must not affect legacy IDs. Count only valid
-                # records with identical normalized content, never absolute rows.
-                quote["id"] = quote["id"] or str(uuid.uuid5(uuid.NAMESPACE_URL,
-                    f"zft-quote:{ordinal}:" + content_key))
-                if quote["id"] in seen:
-                    raise ValueError("duplicate ID")
-                seen.add(quote["id"])
-                ordinals[content_key] = ordinal
-                valid.append(quote)
-            except ValueError as exc:
-                rejected.append({"row": number, "error": str(exc), "record": row})
+        valid, rejected = normalize_records(rows, strict=False)
         self.quotes = valid
         self._has_rejected_rows = bool(rejected)
         if rejected:

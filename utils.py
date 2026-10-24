@@ -88,22 +88,6 @@ def coerce_int(value: Any, fallback: int, *, minimum: int = None, maximum: int =
     return number
 
 
-def clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:
-    """
-    値を整数に変換し、指定範囲内に制限します（coerce_intのエイリアス）。
-    
-    Args:
-        value: 変換する値
-        minimum: 最小値
-        maximum: 最大値
-        fallback: 変換に失敗した場合のデフォルト値
-        
-    Returns:
-        int: 変換・制限された整数値
-    """
-    return coerce_int(value, fallback, minimum=minimum, maximum=maximum)
-
-
 def atomic_write_json(path, payload):
     """直前のファイルを .bak に残し、保存完了後に置換する。"""
     import json

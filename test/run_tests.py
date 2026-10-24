@@ -12,7 +12,7 @@ def run_tests():
     root = Path(__file__).resolve().parent.parent
     with tempfile.TemporaryDirectory(prefix="zft-tests-") as directory:
         destination = Path(directory)
-        for name in ["main.py", "config.py", "utils.py", "image_cache.py", "poster_cache.py", "quote_records.py", "birthday_records.py", "command_errors.py", "setup_fonts.py", "cogs", "test", "scripts"]:
+        for name in ["main.py", "config.py", "utils.py", "image_cache.py", "poster_cache.py", "quote_records.py", "birthday_records.py", "command_errors.py", "event_selection.py", "setup_fonts.py", "cogs", "test", "scripts"]:
             source = root / name
             if not source.exists():
                 continue

@@ -2,7 +2,6 @@
 import asyncio
 import copy
 import json
-import uuid
 from pathlib import Path
 
 import config
@@ -74,20 +73,8 @@ async def restore_snapshot(cog, feature, kind, expected=None):
                         raise ValueError("バックアップのキャラクターIDに異なる誕生日があります")
                     dates[cid] = date
             else:
-                from quote_records import normalize
-                checked, seen, ordinals = [], set(), {}
-                for row in restored:
-                    item = normalize(row)
-                    identity = {key: item[key] for key in ("speaker", "text", "character_id")}
-                    content_key = json.dumps(identity, ensure_ascii=False, sort_keys=True)
-                    ordinal = ordinals.get(content_key, 0) + 1
-                    item["id"] = item["id"] or str(uuid.uuid5(uuid.NAMESPACE_URL, f"zft-quote:{ordinal}:" + content_key))
-                    if item["id"] in seen:
-                        raise ValueError("バックアップの名言IDが重複しています")
-                    seen.add(item["id"])
-                    ordinals[content_key] = ordinal
-                    checked.append(item)
-                restored = checked
+                from quote_records import normalize_records
+                restored, _ = normalize_records(restored)
             attribute = "birthdays" if feature == "birthday" else "quotes"
             previous = getattr(cog, attribute)
             rejected = getattr(cog, "_has_rejected_rows", False)

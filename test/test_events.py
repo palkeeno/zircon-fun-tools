@@ -72,6 +72,15 @@ class Lifecycle(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await self.cog.join("e", self.member, via="message")
 
+    async def test_owner_and_other_guild_cannot_enter_lottery(self):
+        for uid, guild_id in [(99, config.GUILD_ID), (1, config.GUILD_ID + 1)]:
+            self.member.id = uid
+            self.member.guild.id = guild_id
+            with self.assertRaises(ValueError):
+                await self.cog.join("e", self.member, via="message")
+        self.assertEqual(self.cog.events["e"]["entries"], {})
+        self.member.add_roles.assert_not_awaited()
+
     async def test_wrong_condition_and_late_entry(self):
         with self.assertRaises(ValueError):
             await self.cog.join("e", self.member, via="join")

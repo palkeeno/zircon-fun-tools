@@ -24,7 +24,7 @@ from cogs.pagination import Pagination
 from cogs.poster import Poster
 from cogs.help import Help
 from cogs.role_tools import RoleTools, RemovalConfirmation, validate_role
-from cogs.lottery import Lottery
+from cogs.events import Events
 from command_errors import send_error
 from main import FunToolsBot
 from poster_cache import PosterCache
@@ -717,29 +717,11 @@ class HelpAndErrorTests(unittest.IsolatedAsyncioTestCase):
         cog = Poster(MagicMock())
         self.assertEqual(cog.assets_dir.resolve(), directory / 'assets')
 
-    async def test_lottery_excludes_invoker_and_bots(self):
-        item = interaction()
-        role = MagicMock()
-        role.members = [MagicMock(id=99, bot=False), MagicMock(id=1, bot=True)]
-        await Lottery.lottery.callback(Lottery(MagicMock()), item, role, 1)
-        self.assertIn('不足', item.response.send_message.call_args.args[0])
-        item.response.send_message.reset_mock()
-        winner = MagicMock(id=2, bot=False)
-        winner.display_name = 'Winner'
-        role.members.append(winner)
-        item.channel.send = AsyncMock()
-        with patch('cogs.lottery.asyncio.sleep', new=AsyncMock()):
-            await Lottery.lottery.callback(Lottery(MagicMock()), item, role, 1, interval=5)
-        result = item.channel.send.call_args.kwargs['embed']
-        self.assertIn('Winner', result.description)
-        self.assertNotIn('99', result.description)
-
     async def test_help_lists_every_loaded_command_and_can_page(self):
         bot = FunToolsBot()
         try:
             from cogs.oracle import Oracle
-            from cogs.lottery import Lottery
-            for cog in [Birthday(bot), Oracle(bot), Lottery(bot), Poster(bot), Quotes(bot), Help(bot), RoleTools(bot)]:
+            for cog in [Birthday(bot), Oracle(bot), Events(bot), Poster(bot), Quotes(bot), Help(bot), RoleTools(bot)]:
                 await bot.add_cog(cog)
             item = interaction()
             item.guild_id = None
